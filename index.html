@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Vincent & Janice</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#FF77AD">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="V&amp;J">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -31,7 +39,7 @@
 html,body{min-height:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 var(--body);
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-block:16px 100px;overflow-x:hidden}
+  padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:100px;overflow-x:hidden}
 .wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 h1,h2,h3,p{margin:0}
 button{font:inherit;color:inherit;cursor:pointer}
@@ -632,10 +640,17 @@ function listView(){
     '<div class="stack">'+(n?S.plans.map(function(p,i){return planRow(p,i,n)}).join(''):'<div class="card"><p class="empty">The list is empty. Add the first thing you want to do in December.</p></div>')+'</div>'+
     '<div class="btns" style="justify-content:space-between"><button class="btn ghost small" data-act="toggle-edit">'+(S.editList?'Done editing':'Edit list')+'</button><button class="btn" data-act="add-plan"'+(S.db?'':' disabled')+'>+ Add</button></div>';
 }
+function isInstalled(){return (window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true}
+function installBlock(){
+  if(isInstalled())return '<p class="muted" style="font-weight:700">Installed ✓ You are using the app.</p>';
+  if(installEvt)return '<p class="muted" style="font-weight:700">Add it to your home screen like a normal app.</p><div><button class="btn small" data-act="install">Install</button></div>';
+  return '<p class="muted" style="font-weight:700">iPhone: tap Share, then Add to Home Screen. Android: tap ⋮, then Install app.</p>';
+}
 function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="switch">Switch user</button><button class="btn small" data-act="logout">Log out</button></div></div>'+
     '<div class="card stack"><b>Change passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits, used on both phones</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save passcode</button></div></div>'+
+    '<div class="card stack"><b>Install the app</b>'+installBlock()+'</div>'+
     '<div class="card stack"><b>Theme</b><div class="seg" role="group" aria-label="Theme">'+[['light','Pink'],['dark','Night'],['auto','Match phone']].map(function(t){return '<button data-act="theme" data-v="'+t[0]+'" aria-pressed="'+(curTheme()===t[0])+'">'+t[1]+'</button>'}).join('')+'</div></div>'+
     '<div class="card"><div class="seg"><button data-act="motion" aria-pressed="'+reduced()+'">Reduced motion: '+(reduced()?'on':'off')+'</button></div></div>'+
     '<p class="muted" style="font-size:13px;text-align:center">The passcode is a privacy curtain, not real security.</p>';
@@ -863,6 +878,7 @@ var actions={
   who:function(el){S.me=el.dataset.v;store.set('vj_me',S.me);render()},
   switch:function(){closePop();S.me=null;store.del('vj_me');render()},
   theme:function(el){store.set('vj_theme',el.dataset.v);applyTheme();render()},
+  install:function(){if(installEvt){installEvt.prompt();installEvt=null;render()}},
   'play-menu':function(){S.play='menu'},
   'play-open':function(el){S.play=el.dataset.v},
   goc4:function(){S.tab='games';S.play='c4';S.editList=false;render();window.scrollTo(0,0)},
@@ -970,6 +986,10 @@ document.addEventListener('input',function(e){
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSheet()});
 
 /* ---------- boot ---------- */
+var installEvt=null;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();installEvt=e;if(S.tab==='settings'&&S.me)render()});
+window.addEventListener('appinstalled',function(){installEvt=null;render()});
+if('serviceWorker' in navigator)window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
 var CG=window.VJ_GAMES?window.VJ_GAMES.create({S:S,esc:esc,store:store,toast:toast,burst:burst,uid:uid,render:function(){render()},custom:function(){return S.cq},addQ:function(row){return sb?guard(sb.from('custom_questions').insert(row),'Could not save the question.','custom_questions'):Promise.resolve(null)},delQ:function(id){if(sb)guard(sb.from('custom_questions').delete().eq('id',id),null,'custom_questions')}}):null;
 render();
 setInterval(tick,1000);
