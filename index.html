@@ -151,6 +151,8 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 .who{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
 .who button{background:var(--card);border:3px solid var(--pink);border-radius:26px;padding:18px 26px;font-family:var(--display);font-size:34px;font-weight:700;color:var(--fg)}
 
+.who button.guest{font-size:26px;border-style:dashed}
+.who-note{max-width:300px;font-weight:600}
 /* overlay + fx */
 .here{position:fixed;inset:0;z-index:60;background:var(--hero);color:var(--on-hero);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
 .here h2{font-family:var(--display);font-size:72px;line-height:1}
@@ -460,7 +462,7 @@ function listView(){
 }
 function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
-    '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div><button class="btn ghost small" data-act="switch">Switch user</button></div></div>'+
+    '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="switch">Switch user</button><button class="btn small" data-act="logout">Log out</button></div></div>'+
     '<div class="card stack"><b>Change passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits, used on both phones</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save passcode</button></div></div>'+
     '<div class="card"><div class="seg"><button data-act="motion" aria-pressed="'+reduced()+'">Reduced motion: '+(reduced()?'on':'off')+'</button></div></div>'+
     '<p class="muted" style="font-size:13px;text-align:center">The passcode is a privacy curtain, not real security.</p>';
@@ -480,7 +482,10 @@ function gateView(){
   return '<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted" style="font-weight:700">Passcode, please</p><div class="dots" id="dots" aria-hidden="true">'+dots+'</div><div class="pad">'+keys+'</div></div>';
 }
 function whoView(){
-  return '<div class="gate"><h1>Who are you?</h1><div class="who"><button data-act="who" data-v="Vincent">Vincent</button><button data-act="who" data-v="Janice">Janice</button></div></div>';
+  return '<div class="gate"><h1>Who are you?</h1><div class="who"><button data-act="who" data-v="Vincent">Vincent</button><button data-act="who" data-v="Janice">Janice</button><button class="guest" data-act="who" data-v="Guest">Guest</button></div><p class="muted who-note">Guests only see our memories and photos.</p></div>';
+}
+function guestView(){
+  return '<div class="gate"><h1>Hello, guest</h1><p class="muted who-note">Our memories and photos will live here. Coming soon.</p><div class="who"><button data-act="switch">Back</button><button data-act="logout">Log out</button></div></div>';
 }
 function hereOverlay(){
   if(phase()!=='during'||store.get('vj_here')==='1'||!S.me)return '';
@@ -498,6 +503,7 @@ function render(){
   if(!S.passcode){app.innerHTML='<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted">'+(S.dbState==='error'||S.dbState==='none'?'Can’t reach the shared data. Check your connection and refresh.':'Opening…')+'</p></div>';return}
   if(!isUnlocked()){app.innerHTML=gateView();return}
   if(!S.me){app.innerHTML=whoView();return}
+  if(S.me==='Guest'){app.innerHTML=guestView();$('#layer').innerHTML='';S.rendered=renderKey();return}
   app.innerHTML=appView();
   $('#layer').innerHTML=hereOverlay();
   S.rendered=renderKey();
@@ -584,6 +590,7 @@ var actions={
   },
   who:function(el){S.me=el.dataset.v;store.set('vj_me',S.me);render()},
   switch:function(){S.me=null;store.del('vj_me');render()},
+  logout:function(){store.del('vj_pc');store.del('vj_me');S.me=null;S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
   motion:function(){
     if(reduced()){delete document.documentElement.dataset.motion;store.set('vj_motion','')}
     else{document.documentElement.dataset.motion='reduced';store.set('vj_motion','reduced')}
