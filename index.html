@@ -177,7 +177,8 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 .mood button{height:48px;border-radius:14px;border:2px solid var(--line);background:var(--surface);font:800 20px var(--body);color:var(--fg)}
 .mood button[aria-pressed="true"]{background:var(--btn);color:var(--on-btn);border-color:var(--btn)}
 .pop input{font:inherit;color:var(--fg);background:var(--surface);border:2px solid var(--line);border-radius:14px;padding:10px 12px;width:100%;min-width:0}
-.bigmood{font:800 56px/1 var(--body);color:var(--num)}
+.bigmood{font:800 64px/1 var(--body);color:var(--num)}
+.mood button{font-size:30px}
 .ci-note{font-weight:600;overflow-wrap:anywhere}
 .c4{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;background:var(--blue);padding:10px;border-radius:22px;box-shadow:0 6px 18px var(--shadow)}
 .c4 .col{display:flex;flex-direction:column;gap:6px;border:0;background:transparent;padding:0;border-radius:12px;min-width:0}
@@ -218,7 +219,6 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 .note .acts{display:flex;gap:6px;flex:none}
 .note .icon-btn{background:var(--card);width:30px;height:30px;font-size:14px}
 .note .icon-btn.warn{background:var(--btn);width:auto;font-size:13px}
-.who button.guest{font-size:26px;border-style:dashed}
 .who-note{max-width:300px;font-weight:600}
 /* overlay + fx */
 .here{position:fixed;inset:0;z-index:60;background:var(--hero);color:var(--on-hero);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
@@ -309,9 +309,9 @@ function reduced(){return document.documentElement.dataset.motion==='reduced'}
 /* ---------- state ---------- */
 var S={
   db:null,dbState:'loading',booted:false,
-  countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',cq:[],pushOn:false,pushWho:'',pingAt:0,notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
+  countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',cq:[],pushOn:false,pushWho:'',pingAt:0,prefs:(function(){try{return JSON.parse(store.get('vj_prefs')||'{}')||{}}catch(e){return {}}})(),notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
   passcode:'',codes:{},codesReady:false,pending:'',
-  me:store.get('vj_me'),
+  me:(['Vincent','Janice'].indexOf(store.get('vj_me'))>=0?store.get('vj_me'):null),
   tab:'home',editList:false,entered:'',
   rendered:'',confettiDone:{},dayAnimated:false
 };
@@ -323,10 +323,7 @@ function applyTheme(){
 }
 applyTheme();
 
-function codeFor(who){
-  if(who==='Guest')return (S.codes&&S.codes.Guest)||'';
-  return S.passcode||'';
-}
+function codeFor(who){return S.passcode||''}
 function isUnlocked(){var c=S.me?codeFor(S.me):'';return !!c&&store.get('vj_pc')===c}
 function myTz(){return CFG.tz[S.me]||'Asia/Singapore'}
 function other(){return S.me==='Vincent'?'Janice':'Vincent'}
@@ -414,7 +411,7 @@ function applyRows(table,rows){
     var codes={};
     rows.forEach(function(r){if(r.key&&r.key.indexOf('passcode')===0&&r.value)codes[r.key]=String(r.value)});
     S.passcode=codes.passcode||S.passcode;
-    S.codes={Vincent:codes.passcode_vincent||'',Janice:codes.passcode_janice||'',Guest:codes.passcode_guest||''};
+    S.codes={};
     S.codesReady=true;
     return;
   }
@@ -506,38 +503,27 @@ function latestNote(from){
 function pad2(n){return (n<10?'0':'')+n}
 function dayKey(ix){var d=new Date(ix*86400000);return d.getUTCFullYear()+'-'+pad2(d.getUTCMonth()+1)+'-'+pad2(d.getUTCDate())}
 function todayKeyFor(who){var t=ymd(Date.now(),CFG.tz[who]);return {key:t[0]+'-'+pad2(t[1])+'-'+pad2(t[2]),idx:dayIdx(t[0],t[1],t[2])}}
-function ciSet(who){var o={};S.checkins.forEach(function(c){if(c.who===who)o[c.day]=c});return o}
-function ciStreak(who){
-  var set=ciSet(who),i=todayKeyFor(who).idx,n=0;
-  if(!set[dayKey(i)])i-=1;
-  while(set[dayKey(i)]){n++;i--}
-  return n;
-}
+var MOODS=['😞','😕','😐','🙂','😊'];
+function moodFace(n){var level=n>5?Math.ceil(n/2):n;return MOODS[Math.min(5,Math.max(1,level))-1]}
 function checkinCard(){
   if(!S.ciLoaded)return '';
-  return '<div class="card"><div class="sec-title"><h2>Check-ins</h2><span class="pill">asked once a day</span></div><div class="stack">'+
-    CFG.names.map(function(who){
-      var set=ciSet(who),t=todayKeyFor(who),total=Object.keys(set).length,st=ciStreak(who),dots='',sum=0,cnt=0;
-      for(var k=13;k>=0;k--){
-        var key=dayKey(t.idx-k),c=set[key];
-        if(c&&c.mood){sum+=c.mood;cnt++}
-        dots+='<i class="'+(c?'on':'')+(k===0?' today':'')+'" title="'+key+(c&&c.mood?' · '+c.mood+'/10':'')+'"'+(c&&c.mood?' style="opacity:'+(0.4+c.mood*0.06).toFixed(2)+'"':'')+'></i>';
-      }
-      var today=set[t.key];
-      var status=today?(today.mood?today.mood+'/10 today':'here today ✓'):'not yet today';
-      var avg=cnt?' · avg '+(sum/cnt).toFixed(1)+'/10':'';
-      return '<div class="ci-row"><div class="ci-top"><b>'+esc(who)+'</b><span>'+status+'</span></div>'+
-        (today&&today.note?'<p class="ci-note">“'+esc(today.note)+'”</p>':'')+
-        '<div class="ci-dots" aria-label="Last 14 days">'+dots+'</div><div class="ci-top"><span>'+plural(st,'day')+' in a row</span><span>'+plural(total,'day')+avg+'</span></div></div>';
-    }).join('')+'</div></div>';
+  var rows=CFG.names.map(function(who){
+    var t=todayKeyFor(who);
+    var c=S.checkins.filter(function(x){return x.who===who&&x.day===t.key&&(x.mood||x.note)})[0];
+    if(!c)return '';
+    return '<div class="ci-row"><div class="ci-top"><b>'+esc(who)+'</b><span style="font-size:26px">'+(c.mood?moodFace(c.mood):'💬')+'</span></div>'+(c.note?'<p class="ci-note">“'+esc(c.note)+'”</p>':'')+'</div>';
+  }).filter(Boolean);
+  if(!rows.length)return '';
+  return '<div class="card"><div class="sec-title"><h2>Today</h2><span class="pill">shared if you feel like it</span></div><div class="stack">'+rows.join('')+'</div></div>';
 }
 function seenKey(){return 'vj_seen_'+S.me}
 function closePop(){var el=$('#pop');if(el){el.innerHTML='';delete el.dataset.id}}
 function showPop(id,html){var el=$('#pop');if(!el||el.dataset.id)return false;el.dataset.id=id;el.innerHTML='<div class="pop-back"><div class="pop" role="dialog">'+html+'</div></div>';return true}
+function markCiDone(){store.set('vj_ciskip_'+S.me,todayKeyFor(S.me).key)}
 function saveCheckin(mood,text){
   var t=todayKeyFor(S.me),id=S.me+'-'+t.key;
   closePop();
-  guard(sb.from('checkins').upsert({id:id,who:S.me,day:t.key,created_at:Date.now(),mood:mood,mood_note:text||null}),'Could not save your check-in.','checkins').then(function(r){if(r===null)S.ciFailed=id});
+  guard(sb.from('checkins').upsert({id:id,who:S.me,day:t.key,created_at:Date.now(),mood:mood,mood_note:text||null}),'Could not save that.','checkins').then(function(r){if(r===null)S.ciFailed=id});
 }
 var GREET_LINES={
   morning:['May your day bloom the way you bloom my heart 🌸','Hope today is gentle with you and full of little good things ☀️','Wake up slowly. The world is a bit brighter with you in it 🌼'],
@@ -555,37 +541,33 @@ function dayPart(who){
 function greetHtml(){
   var part=dayPart(S.me),lines=GREET_LINES[part],t=todayKeyFor(S.me);
   var line=lines[t.idx%lines.length];
-  var pet=S.me==='Janice'?'gorgeous':'handsome';
-  var seen=S.checkins.some(function(c){return c.id===other()+'-'+todayKeyFor(other()).key});
-  var hint=seen?'Say something sweet to '+esc(other())+' 💌':esc(other())+' has not checked in yet. Leave a little something to find 💌';
-  return '<h2>Good '+part+', '+pet+' '+esc(S.me)+' 🌸</h2><p style="font-weight:700;font-size:18px">'+esc(line)+'</p>'+
-    '<div class="field" style="text-align:left"><label for="greet-note" class="muted">'+hint+'</label><textarea id="greet-note" maxlength="280" placeholder="A note for '+esc(other())+' (optional)"></textarea></div>'+
+  return '<h2>Good '+part+', '+esc(S.me)+' 🌸</h2><p style="font-weight:700;font-size:18px">'+esc(line)+'</p>'+
+    '<div class="field" style="text-align:left"><label for="greet-note" class="muted">Leave '+esc(other())+' a little note 💌</label><textarea id="greet-note" maxlength="280" placeholder="A note for '+esc(other())+' (optional)"></textarea></div>'+
     '<div class="btns"><button class="btn" data-act="greet-send">Continue 💗</button><button class="btn ghost" data-act="greet-skip">Skip note</button></div>';
 }
 function moodHtml(){
-  var btns='';
-  for(var i=1;i<=10;i++)btns+='<button type="button" data-act="mood-pick" data-v="'+i+'" aria-pressed="false">'+i+'</button>';
-  return '<h2>How are you today? 🌸</h2><p class="muted" style="font-weight:700">1 is rough, 10 is wonderful</p><div class="mood" role="group" aria-label="Mood from 1 to 10">'+btns+'</div>'+
-    '<input id="mood-note" maxlength="120" placeholder="Anything you want to say? (optional)" aria-label="Optional note">'+
-    '<div class="btns"><button class="btn" data-act="mood-save">Check in 💗</button><button class="btn ghost" data-act="mood-skip">Skip</button></div>';
+  var btns=MOODS.map(function(f,i){return '<button type="button" data-act="mood-pick" data-v="'+(i+1)+'" aria-pressed="false" aria-label="Mood '+(i+1)+' of 5">'+f+'</button>'}).join('');
+  return '<h2>How are you today? 🌸</h2><p class="muted" style="font-weight:700">Only if you feel like sharing</p><div class="mood" role="group" aria-label="Mood">'+btns+'</div>'+
+    '<input id="mood-note" maxlength="120" placeholder="A few words, if you like (optional)" aria-label="Optional message">'+
+    '<div class="btns"><button class="btn" data-act="mood-save">Share 💗</button><button class="btn ghost" data-act="mood-skip">Not today</button></div>';
 }
 function showMood(){closePop();S.mood=null;showPop('mood',moodHtml())}
 function maybeCheckIn(){
   if(!sb||!S.ciLoaded||CFG.names.indexOf(S.me)<0)return;
   var t=todayKeyFor(S.me),id=S.me+'-'+t.key;
-  if(S.ciFailed===id||S.ciAsked===id||S.checkins.some(function(c){return c.id===id}))return;
+  if(S.ciFailed===id||S.ciAsked===id||store.get('vj_ciskip_'+S.me)===t.key||S.checkins.some(function(c){return c.id===id}))return;
   if(showPop('greet',greetHtml()))S.ciAsked=id;
 }
 function latestMoodOf(who){
   var best=null;
-  S.checkins.forEach(function(c){if(c.who===who&&c.mood&&(!best||c.day>best.day))best=c});
+  S.checkins.forEach(function(c){if(c.who===who&&(c.mood||c.note)&&(!best||c.day>best.day))best=c});
   return best;
 }
 function checkOtherMood(){
   if(!S.ciLoaded||CFG.names.indexOf(S.me)<0)return;
   var c=latestMoodOf(other());
-  if(!c||store.get('vj_seenci_'+S.me)===c.id)return;
-  var shown=showPop('ci-'+c.id,'<h2>'+esc(c.who)+' checked in 💗</h2><p class="label">'+esc(c.day)+'</p><div class="bigmood">'+c.mood+'<span style="font-size:24px">/10</span></div>'+
+  if(!c||c.day!==todayKeyFor(other()).key||store.get('vj_seenci_'+S.me)===c.id)return;
+  var shown=showPop('ci-'+c.id,'<h2>'+esc(c.who)+' shared today’s mood 💗</h2><div class="bigmood">'+(c.mood?moodFace(c.mood):'💬')+'</div>'+
     (c.note?'<div class="note"><p>'+esc(c.note)+'</p></div>':'')+
     '<div class="btns"><button class="btn" data-act="cio-ok" data-id="'+esc(c.id)+'">Got it 💗</button><button class="btn ghost" data-act="cio-note" data-id="'+esc(c.id)+'">Send a note</button></div>');
   if(shown)burst(['💗','🩷'],10);
@@ -659,8 +641,13 @@ function b64ToBytes(str){
 }
 function savePushSub(sub){
   var j=sub.toJSON();
-  return sb.from('push_subs').upsert({endpoint:j.endpoint,who:S.me,p256dh:j.keys.p256dh,auth:j.keys.auth,created_at:Date.now()});
+  var row={endpoint:j.endpoint,who:S.me,p256dh:j.keys.p256dh,auth:j.keys.auth,created_at:Date.now(),prefs:S.prefs};
+  return sb.from('push_subs').upsert(row).then(function(res){
+    if(res&&res.error){delete row.prefs;return sb.from('push_subs').upsert(row)}
+    return res;
+  });
 }
+var PREF_OPTS=[['checkins','Mood shares'],['games','Connect Four moves'],['list','List and countdown changes'],['questions','New game questions'],['reminders','Countdown reminders'],['security','Passcode changes']];
 function enablePush(){
   if(!sb||!AC.vapidPublicKey||CFG.names.indexOf(S.me)<0){toast('Log in as Vincent or Janice first.');return}
   Notification.requestPermission().then(function(perm){
@@ -699,8 +686,10 @@ function notifBlock(){
   if(!AC.vapidPublicKey)return '<p class="muted" style="font-weight:700">Notifications are not set up yet.</p>';
   if(!pushSupport())return '<p class="muted" style="font-weight:700">On iPhone: add the app to your Home Screen first (Share, then Add to Home Screen), then open it from there.</p>';
   if(Notification.permission==='denied')return '<p class="muted" style="font-weight:700">Notifications are blocked. Turn them on in your phone Settings, Notifications, V&amp;J.</p>';
-  if(S.pushOn)return '<p class="muted" style="font-weight:700">On ✓ You get pings for notes, check-ins, games and more.</p><div><button class="btn ghost small" data-act="push-test">Send a test</button></div>';
-  return '<p class="muted" style="font-weight:700">Get a ping on this phone for notes, check-ins, games and more.</p><div><button class="btn small" data-act="push-on">Turn on notifications</button></div>';
+  if(S.pushOn)return '<p class="muted" style="font-weight:700">On ✓ Always on: notes, Ping 💗, game invites, birthdays, milestones and trip days.</p>'+
+    '<p class="label">Optional pings</p><div class="chips">'+PREF_OPTS.map(function(o){return '<button type="button" data-act="pref" data-v="'+o[0]+'" aria-pressed="'+(!!S.prefs[o[0]])+'">'+o[1]+'</button>'}).join('')+'</div>'+
+    '<div><button class="btn ghost small" data-act="push-test">Send a test</button></div>';
+  return '<p class="muted" style="font-weight:700">Get a ping on this phone for notes, Ping 💗, game invites, birthdays and milestones. You can add more later.</p><div><button class="btn small" data-act="push-on">Turn on notifications</button></div>';
 }
 function isInstalled(){return (window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true}
 function installBlock(){
@@ -711,8 +700,7 @@ function installBlock(){
 function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="switch">Switch user</button><button class="btn small" data-act="logout">Log out</button></div></div>'+
-    '<div class="card stack"><b>Our passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits. The same for Vincent and Janice. Never share it with guests.</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save our passcode</button></div></div>'+
-    '<div class="card stack"><b>Guest code</b><div class="field"><label for="newgc" class="muted">Guests need their own code to see memories and photos. Until you set one, guests cannot log in.</label><input id="newgc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="saveguest"'+(S.db?'':' disabled')+'>Save guest code</button></div></div>'+
+    '<div class="card stack"><b>Our passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits. The same for Vincent and Janice. Keep it between the two of you.</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save our passcode</button></div></div>'+
     '<div class="card stack"><b>Notifications</b>'+notifBlock()+'</div>'+
     '<div class="card stack"><b>Install the app</b>'+installBlock()+'</div>'+
     '<div class="card stack"><b>Theme</b><div class="seg" role="group" aria-label="Theme">'+[['light','Pink'],['dark','Night'],['auto','Match phone']].map(function(t){return '<button data-act="theme" data-v="'+t[0]+'" aria-pressed="'+(curTheme()===t[0])+'">'+t[1]+'</button>'}).join('')+'</div></div>'+
@@ -825,14 +813,11 @@ function gateView(){
   for(var i=0;i<len;i++)dots+='<i class="'+(i<S.entered.length?'on':'')+'"></i>';
   var keys='123456789'.split('').concat(['','0','⌫']).map(function(k){
     return k===''?'<span></span>':'<button data-act="key" data-v="'+k+'" aria-label="'+(k==='⌫'?'Delete':k)+'">'+k+'</button>'}).join('');
-  if(!code)return '<div class="gate"><h1>Hi, '+esc(S.pending)+' 💗</h1><p class="muted who-note">Guest access is off until a guest code is set. Ask Vincent or Janice to set one in Settings.</p><button class="btn ghost small" data-act="gate-back">Back</button></div>';
+  if(!code)return '<div class="gate"><h1>Hi, '+esc(S.pending)+' 💗</h1><p class="muted who-note">No passcode has been set yet.</p><button class="btn ghost small" data-act="gate-back">Back</button></div>';
   return '<div class="gate"><h1>Hi, '+esc(S.pending)+' 💗</h1><p class="muted" style="font-weight:700">Your passcode, please</p><div class="dots" id="dots" aria-hidden="true">'+dots+'</div><div class="pad">'+keys+'</div><button class="btn ghost small" data-act="gate-back">Not you?</button></div>';
 }
 function whoView(){
-  return '<div class="gate"><h1>Who are you?</h1><div class="who"><button data-act="who" data-v="Vincent">Vincent</button><button data-act="who" data-v="Janice">Janice</button><button class="guest" data-act="who" data-v="Guest">Guest</button></div><p class="muted who-note">Guests only see our memories and photos.</p></div>';
-}
-function guestView(){
-  return '<div class="gate"><h1>Hello, guest</h1><p class="muted who-note">Our memories and photos will live here. Coming soon.</p><div class="who"><button data-act="switch">Back</button><button data-act="logout">Log out</button></div></div>';
+  return '<div class="gate"><h1>Who are you?</h1><div class="who"><button data-act="who" data-v="Vincent">Vincent</button><button data-act="who" data-v="Janice">Janice</button></div></div>';
 }
 function hereOverlay(){
   if(phase()!=='during'||store.get('vj_here')==='1'||!S.me)return '';
@@ -850,7 +835,6 @@ function render(){
   if(!S.codesReady){app.innerHTML='<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted">'+(S.dbState==='error'||S.dbState==='none'?'Can’t reach the shared data. Check your connection and refresh.':'Opening…')+'</p></div>';return}
   if(S.me&&!isUnlocked()){S.pending=S.me;S.me=null;S.entered=''}
   if(!S.me){app.innerHTML=S.pending?gateView():whoView();return}
-  if(S.me==='Guest'){app.innerHTML=guestView();$('#layer').innerHTML='';S.rendered=renderKey();return}
   app.innerHTML=appView();
   $('#layer').innerHTML=hereOverlay();
   S.rendered=renderKey();
@@ -958,6 +942,13 @@ var actions={
       if(ok){toast('Ping sent 💗');burst(['💗','🩷'],8)}
     });
   },
+  pref:function(el){
+    var k=el.dataset.v;
+    S.prefs[k]=!S.prefs[k];
+    store.set('vj_prefs',JSON.stringify(S.prefs));
+    if(sb&&S.pushOn)navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription()}).then(function(sub){if(sub)return savePushSub(sub)}).catch(function(){});
+    render();
+  },
   'push-on':function(){enablePush()},
   'push-test':function(){
     navigator.serviceWorker.ready.then(function(reg){return reg.showNotification('Test ping 💗',{body:'Notifications are working.',icon:'icons/icon-192.png',badge:'icons/icon-192.png'})}).catch(function(){toast('Could not show a test.')});
@@ -979,8 +970,13 @@ var actions={
   },
   'greet-skip':function(){showMood()},
   'mood-pick':function(el){S.mood=+el.dataset.v;$$('.mood button').forEach(function(b){b.setAttribute('aria-pressed',String(b===el))})},
-  'mood-save':function(){if(!S.mood){toast('Pick a number from 1 to 10.');return}var i=$('#mood-note');saveCheckin(S.mood,i?i.value.trim().slice(0,120):'')},
-  'mood-skip':function(){saveCheckin(null,'')},
+  'mood-save':function(){
+    var i=$('#mood-note'),text=i?i.value.trim().slice(0,120):'';
+    markCiDone();
+    if(!S.mood&&!text){closePop();return}
+    saveCheckin(S.mood||null,text);
+  },
+  'mood-skip':function(){markCiDone();closePop()},
   'cio-ok':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();render()},
   'cio-note':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();noteSheet()},
   'pop-ok':function(el){store.set(seenKey(),el.dataset.ts);closePop()},
@@ -996,13 +992,6 @@ var actions={
     if(!/^\d{4,6}$/.test(v)){toast('Use 4 to 6 digits.');return}
     guard(sb.from('settings').upsert({key:'passcode',value:v,changed_by:S.me})).then(function(r){
       if(r!==null){S.passcode=v;store.set('vj_pc',v);toast('Passcode changed for both of you.');render()}
-    });
-  },
-  saveguest:function(){
-    var v=$('#newgc').value.trim();
-    if(!/^\d{4,6}$/.test(v)){toast('Use 4 to 6 digits.');return}
-    guard(sb.from('settings').upsert({key:'passcode_guest',value:v,changed_by:S.me})).then(function(r){
-      if(r!==null){S.codes.Guest=v;toast('Guest code changed.');render()}
     });
   },
   here:function(){store.set('vj_here','1');$('#layer').innerHTML=''},
