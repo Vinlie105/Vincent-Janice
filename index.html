@@ -301,7 +301,7 @@ function reduced(){return document.documentElement.dataset.motion==='reduced'}
 /* ---------- state ---------- */
 var S={
   db:null,dbState:'loading',booted:false,
-  countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
+  countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',cq:[],notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
   passcode:'',
   me:store.get('vj_me'),
   tab:'home',editList:false,entered:'',
@@ -393,6 +393,7 @@ var MAP={
   countdowns:function(r){return {id:r.id,title:r.title,emoji:r.emoji,datetime:r.datetime,date:r.date,time:r.time,tz:r.tz,addedBy:r.added_by,createdAt:r.created_at,ts:Date.parse(r.datetime)}},
   plans:function(r){return {id:r.id,title:r.title,emoji:r.emoji,done:r.done,doneBy:r.done_by,doneAt:r.done_at,addedBy:r.added_by,note:r.note,order:r.sort_order}},
   notes:function(r){return {id:r.id,text:r.body,from:r.from_name,createdAt:r.created_at}},
+  custom_questions:function(r){return {id:r.id,mode:r.mode,cat:r.cat,q:r.q,at:r.created_at||0}},
   game:function(r){return {id:r.id,board:r.board,turn:r.turn,winner:r.winner,starter:r.starter,vw:r.vincent_wins||0,jw:r.janice_wins||0,draws:r.draws||0,upd:r.updated_at||0}},
   checkins:function(r){return {id:r.id,who:r.who,day:r.day,mood:r.mood,note:r.mood_note,at:r.created_at}}
 };
@@ -401,6 +402,7 @@ function applyRows(table,rows){
   if(table==='countdowns')S.countdowns=rows.map(MAP.countdowns).filter(function(c){return !isNaN(c.ts)});
   if(table==='plans')S.plans=rows.map(MAP.plans).sort(function(a,b){return (a.order||0)-(b.order||0)});
   if(table==='checkins'){S.checkins=rows.map(MAP.checkins);S.ciLoaded=true}
+  if(table==='custom_questions'){S.cq=rows.map(MAP.custom_questions);return}
   if(table==='game'){S.game=rows.length?MAP.game(rows[0]):null;return}
   if(table==='notes')S.notesLoaded=true;
   if(table==='notes')S.notes=rows.map(MAP.notes).sort(function(a,b){return b.createdAt-a.createdAt});
@@ -415,7 +417,7 @@ function load(table){
     S.booted=true;render();
   });
 }
-var TABLES=['settings','countdowns','plans','notes','checkins','game'];
+var TABLES=['settings','countdowns','plans','notes','checkins','game','custom_questions'];
 function connect(){
   var url=AC.supabaseUrl,key=AC.supabaseAnonKey;
   if(!window.supabase||!url||!key||/YOUR-/.test(key)){S.dbState='none';S.booted=true;render();return}
@@ -968,7 +970,7 @@ document.addEventListener('input',function(e){
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSheet()});
 
 /* ---------- boot ---------- */
-var CG=window.VJ_GAMES?window.VJ_GAMES.create({S:S,esc:esc,store:store,toast:toast,burst:burst,render:function(){render()}}):null;
+var CG=window.VJ_GAMES?window.VJ_GAMES.create({S:S,esc:esc,store:store,toast:toast,burst:burst,uid:uid,render:function(){render()},custom:function(){return S.cq},addQ:function(row){return sb?guard(sb.from('custom_questions').insert(row),'Could not save the question.','custom_questions'):Promise.resolve(null)},delQ:function(id){if(sb)guard(sb.from('custom_questions').delete().eq('id',id),null,'custom_questions')}}):null;
 render();
 setInterval(tick,1000);
 connect();

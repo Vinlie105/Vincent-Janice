@@ -4,7 +4,6 @@
   'use strict';
 
   var KEY = 'vj_cg';
-  var CUSTOM_KEY = 'vj_cq';
   var CATS = ['All', 'Favourites', 'Childhood', 'Habits', 'Us', 'Dreams', 'Random'];
   var ROUNDS = [10, 20, 30];
   var MODES = {
@@ -20,12 +19,8 @@
     var toast = ctx.toast;
     var Q = window.VJ_QUESTIONS || { guess: {}, tt: [], wyr: [], deep: [] };
     var G = read(KEY, { stage: 'setup', rounds: 10, cat: 'All', code: '' });
-    var custom = read(CUSTOM_KEY, {});
     var timer = null;
 
-    ['guess', 'tt', 'wyr', 'deep'].forEach(function (k) {
-      if (!Array.isArray(custom[k])) custom[k] = [];
-    });
     G.count = 0;
 
     /* ---------- storage ---------- */
@@ -38,7 +33,9 @@
       }
     }
     function save() { ctx.store.set(KEY, JSON.stringify(G)); }
-    function saveCustom() { ctx.store.set(CUSTOM_KEY, JSON.stringify(custom)); }
+    function customOf(mode) {
+      return ctx.custom().filter(function (x) { return x.mode === mode; }).sort(function (a, b) { return a.at - b.at; });
+    }
 
     /* ---------- shared shuffle: same code + same pool = same order ---------- */
     function hash(str) {
@@ -71,14 +68,15 @@
     function pool(mode, cat) {
       var base = [];
       var extra = [];
+      var cats = cat === 'All' ? Object.keys(Q.guess) : [cat];
       if (mode === 'guess') {
-        var cats = cat === 'All' ? Object.keys(Q.guess) : [cat];
         cats.forEach(function (c) { (Q.guess[c] || []).forEach(function (q) { base.push(q); }); });
-        custom.guess.forEach(function (x) { if (cat === 'All' || x.cat === cat) extra.push(x.q); });
       } else {
         (Q[mode] || []).forEach(function (q) { base.push(q); });
-        custom[mode].forEach(function (q) { extra.push(q); });
       }
+      customOf(mode).forEach(function (x) {
+        if (mode !== 'guess' || cat === 'All' || x.cat === cat) extra.push(x.q);
+      });
       return base.concat(extra.sort());
     }
     function fingerprint(list) {
@@ -150,9 +148,9 @@
     }
     function customView() {
       var mode = G.mode;
-      var items = custom[mode].map(function (x, i) {
-        var text = mode === 'guess' ? x.q + ' (' + x.cat + ')' : x;
-        return '<div class="row"><div class="mid"><b>' + esc(text) + '</b></div><span class="acts"><button class="icon-btn" data-act="cg-delcus" data-i="' + i + '" aria-label="Remove question">🗑️</button></span></div>';
+      var items = customOf(mode).map(function (x) {
+        var text = mode === 'guess' ? x.q + ' (' + x.cat + ')' : x.q;
+        return '<div class="row"><div class="mid"><b>' + esc(text) + '</b></div><span class="acts"><button class="icon-btn" data-act="cg-delcus" data-id="' + esc(x.id) + '" aria-label="Remove question">🗑️</button></span></div>';
       }).join('');
       var hint = mode === 'tt' ? 'Write it as “A or B”. ' : '';
       var catPick = mode === 'guess'
@@ -160,7 +158,7 @@
           CATS.slice(1).map(function (c) { return '<option' + (c === (G.newcat || 'Favourites') ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></div>'
         : '';
       return '<div class="card stack"><b>+ Add your own question</b>' +
-        '<div class="field"><label for="cg-new" class="muted">' + hint + 'Add it on both phones, or the order will differ.</label><input id="cg-new" maxlength="140" value="' + esc(G.newq || '') + '"></div>' +
+        '<div class="field"><label for="cg-new" class="muted">' + hint + 'Shared with both phones automatically.</label><input id="cg-new" maxlength="140" value="' + esc(G.newq || '') + '"></div>' +
         catPick + '<div><button class="btn small" data-act="cg-add">Add</button></div>' +
         (items ? '<div class="stack">' + items + '</div>' : '') + '</div>';
     }
@@ -286,10 +284,16 @@
       var text = (G.newq || '').trim();
       if (text.length < 6) { toast('Write the whole question first.'); return; }
       if (G.mode === 'tt' && text.indexOf(' or ') < 0) { toast('Write it as “A or B”.'); return; }
-      if (G.mode === 'guess') custom.guess.push({ cat: G.newcat || 'Favourites', q: text });
-      else custom[G.mode].push(text);
+      var row = {
+        id: ctx.uid(),
+        mode: G.mode,
+        cat: G.mode === 'guess' ? (G.newcat || 'Favourites') : null,
+        q: text,
+        added_by: S.me,
+        created_at: Date.now()
+      };
       G.newq = '';
-      saveCustom();
+      ctx.addQ(row);
     }
 
     var handlers = {
@@ -324,7 +328,7 @@
       'cg-quit': function () { clearTimeout(timer); G.stage = 'setup'; },
       'cg-again': function () { clearTimeout(timer); G.stage = 'setup'; G.code = ''; },
       'cg-add': addCustom,
-      'cg-delcus': function (el) { custom[G.mode].splice(+el.dataset.i, 1); saveCustom(); }
+      'cg-delcus': function (el) { ctx.delQ(el.dataset.id); }
     };
 
     function act(name, el) {
