@@ -152,6 +152,14 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 .who{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
 .who button{background:var(--card);border:3px solid var(--pink);border-radius:26px;padding:18px 26px;font-family:var(--display);font-size:34px;font-weight:700;color:var(--fg)}
 
+.ci-row{display:flex;flex-direction:column;gap:8px;background:var(--surface);border-radius:16px;padding:10px 12px}
+.ci-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.ci-top b{font-family:var(--display);font-size:26px;line-height:1}
+.ci-top span{font-weight:700;color:var(--muted);font-size:14px}
+.ci-dots{display:flex;gap:4px}
+.ci-dots i{flex:1;height:16px;border-radius:6px;background:var(--line);opacity:.55}
+.ci-dots i.on{background:var(--red);opacity:1}
+.ci-dots i.today{outline:2px solid var(--fg);outline-offset:1px}
 .note-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .note .acts{display:flex;gap:6px;flex:none}
 .note .icon-btn{background:var(--card);width:30px;height:30px;font-size:14px}
@@ -244,7 +252,7 @@ function reduced(){return document.documentElement.dataset.motion==='reduced'}
 /* ---------- state ---------- */
 var S={
   db:null,dbState:'loading',booted:false,
-  countdowns:[],plans:[],notes:[],
+  countdowns:[],plans:[],notes:[],checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',
   passcode:'',
   me:store.get('vj_me'),
   tab:'home',editList:false,entered:'',
@@ -335,12 +343,14 @@ function guard(p,msg,table){
 var MAP={
   countdowns:function(r){return {id:r.id,title:r.title,emoji:r.emoji,datetime:r.datetime,date:r.date,time:r.time,tz:r.tz,addedBy:r.added_by,createdAt:r.created_at,ts:Date.parse(r.datetime)}},
   plans:function(r){return {id:r.id,title:r.title,emoji:r.emoji,done:r.done,doneBy:r.done_by,doneAt:r.done_at,addedBy:r.added_by,note:r.note,order:r.sort_order}},
-  notes:function(r){return {id:r.id,text:r.body,from:r.from_name,createdAt:r.created_at}}
+  notes:function(r){return {id:r.id,text:r.body,from:r.from_name,createdAt:r.created_at}},
+  checkins:function(r){return {id:r.id,who:r.who,day:r.day}}
 };
 function applyRows(table,rows){
   if(table==='settings'){var pc=rows.filter(function(r){return r.key==='passcode'})[0];if(pc&&pc.value)S.passcode=String(pc.value);return}
   if(table==='countdowns')S.countdowns=rows.map(MAP.countdowns).filter(function(c){return !isNaN(c.ts)});
   if(table==='plans')S.plans=rows.map(MAP.plans).sort(function(a,b){return (a.order||0)-(b.order||0)});
+  if(table==='checkins'){S.checkins=rows.map(MAP.checkins);S.ciLoaded=true}
   if(table==='notes')S.notes=rows.map(MAP.notes).sort(function(a,b){return b.createdAt-a.createdAt});
 }
 function load(table){
@@ -353,7 +363,7 @@ function load(table){
     S.booted=true;render();
   });
 }
-var TABLES=['settings','countdowns','plans','notes'];
+var TABLES=['settings','countdowns','plans','notes','checkins'];
 function connect(){
   var url=AC.supabaseUrl,key=AC.supabaseAnonKey;
   if(!window.supabase||!url||!key||/YOUR-/.test(key)){S.dbState='none';S.booted=true;render();return}
@@ -420,6 +430,34 @@ function latestNote(from){
   for(var i=0;i<S.notes.length;i++){if(S.notes[i].from===from)return S.notes[i]}
   return null;
 }
+function pad2(n){return (n<10?'0':'')+n}
+function dayKey(ix){var d=new Date(ix*86400000);return d.getUTCFullYear()+'-'+pad2(d.getUTCMonth()+1)+'-'+pad2(d.getUTCDate())}
+function todayKeyFor(who){var t=ymd(Date.now(),CFG.tz[who]);return {key:t[0]+'-'+pad2(t[1])+'-'+pad2(t[2]),idx:dayIdx(t[0],t[1],t[2])}}
+function ciSet(who){var o={};S.checkins.forEach(function(c){if(c.who===who)o[c.day]=1});return o}
+function ciStreak(who){
+  var set=ciSet(who),i=todayKeyFor(who).idx,n=0;
+  if(!set[dayKey(i)])i-=1;
+  while(set[dayKey(i)]){n++;i--}
+  return n;
+}
+function checkinCard(){
+  if(!S.ciLoaded)return '';
+  return '<div class="card"><div class="sec-title"><h2>Check-ins</h2><span class="pill">logged when you open the app</span></div><div class="stack">'+
+    CFG.names.map(function(who){
+      var set=ciSet(who),t=todayKeyFor(who),total=Object.keys(set).length,st=ciStreak(who),dots='';
+      for(var k=13;k>=0;k--){var key=dayKey(t.idx-k);dots+='<i class="'+(set[key]?'on':'')+(k===0?' today':'')+'" title="'+key+'"></i>'}
+      return '<div class="ci-row"><div class="ci-top"><b>'+esc(who)+'</b><span>'+(set[t.key]?'here today ✓':'not yet today')+'</span></div><div class="ci-dots" aria-label="Last 14 days">'+dots+'</div><div class="ci-top"><span>'+plural(st,'day')+' in a row</span><span>'+plural(total,'day')+' total</span></div></div>';
+    }).join('')+'</div></div>';
+}
+function maybeCheckIn(){
+  if(!sb||!S.ciLoaded||S.ciBusy||CFG.names.indexOf(S.me)<0)return;
+  var t=todayKeyFor(S.me),id=S.me+'-'+t.key;
+  if(S.ciFailed===id||S.checkins.some(function(c){return c.id===id}))return;
+  S.ciBusy=true;
+  Promise.resolve(sb.from('checkins').upsert({id:id,who:S.me,day:t.key,created_at:Date.now()})).then(function(r){
+    if(r&&r.error)S.ciFailed=id;
+  }).catch(function(){S.ciFailed=id}).then(function(){S.ciBusy=false;load('checkins')});
+}
 function noteActs(n){
   return '<span class="acts"><button class="icon-btn" data-act="edit-note" data-id="'+esc(n.id)+'" aria-label="Edit note">✏️</button><button class="icon-btn" data-act="del" data-col="notes" data-id="'+esc(n.id)+'" aria-label="Delete note">🗑️</button></span>';
 }
@@ -448,7 +486,7 @@ function syncBanner(){
   return '';
 }
 function homeView(){
-  return syncBanner()+milestoneCard()+heroCard()+dayCard()+bdayCards()+clocksCard()+notesCard()+miniCountdowns();
+  return syncBanner()+milestoneCard()+heroCard()+dayCard()+bdayCards()+clocksCard()+checkinCard()+notesCard()+miniCountdowns();
 }
 function cdRow(c,controls){
   return '<div class="row"><span class="em">'+esc(c.emoji)+'</span><div class="mid"><b>'+esc(c.title)+'</b><small>added by '+esc(c.addedBy)+' · '+new Date(c.ts).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:c.tz==='JKT'?'Asia/Jakarta':'Asia/Singapore',hour:c.time?'2-digit':undefined,minute:c.time?'2-digit':undefined})+(c.time?' '+esc(c.tz):'')+'</small></div>'+
@@ -534,6 +572,7 @@ function render(){
   });
   if($('.banner')&&!S.confettiDone.ms){S.confettiDone.ms=1;confetti()}
   if($('.here')&&!S.confettiDone.here){S.confettiDone.here=1;confetti()}
+  maybeCheckIn();
 }
 function tick(){
   if(!S.booted||!isUnlocked()||!S.me)return;
