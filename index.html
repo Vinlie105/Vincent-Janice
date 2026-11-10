@@ -10,22 +10,22 @@
 <style>
 /* Layout: one soft column, hero countdown on top, rounded stacked cards, bottom tab bar. Pink first, then blue, white, red. */
 :root{
-  --bg:#FFF8F9; --fg:#1F3A5F; --muted:#586E8F; --card:#FCE4EA; --surface:#FFFFFF;
-  --pink:#F4A7B9; --red:#D7263D; --blue:#D6E4F7; --line:#F2CBD5;
-  --hero:#F4A7B9; --on-hero:#1F3A5F; --tile:#FFF8F9; --num:#D7263D;
-  --btn:#D7263D; --on-btn:#FFFFFF; --shadow:rgba(215,38,61,.14); color-scheme:light;
+  --bg:#FFF3F7; --fg:#1F3A5F; --muted:#556B8D; --card:#FFD1E1; --surface:#FFFFFF;
+  --pink:#FF7FA8; --red:#E11D48; --blue:#CBE3FF; --line:#FFB3CC;
+  --hero:#FF8FB4; --on-hero:#1F3A5F; --tile:#FFF3F7; --num:#E11D48;
+  --btn:#E11D48; --on-btn:#FFFFFF; --shadow:rgba(255,80,135,.28); color-scheme:light;
   --display:'Caveat','Patrick Hand',cursive; --body:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#151826; --fg:#F7E9EE; --muted:#B9AAC4; --card:#241F36; --surface:#2E2842;
-  --pink:#E58FA6; --red:#FF6B7D; --blue:#2A3D63; --line:#3B3350;
-  --hero:#4A2A47; --on-hero:#FCE4EA; --tile:#2E2442; --num:#FF8A98;
-  --btn:#FF6B7D; --on-btn:#2B0A12; --shadow:rgba(0,0,0,.35); color-scheme:dark}}
+  --bg:#1A1528; --fg:#FFEFF5; --muted:#C4B3CF; --card:#34204A; --surface:#3F2B58;
+  --pink:#FF8FB4; --red:#FF6B8B; --blue:#2F4A7A; --line:#55346E;
+  --hero:#7A2F6A; --on-hero:#FFE3EE; --tile:#3F2B58; --num:#FF9BB5;
+  --btn:#FF6B8B; --on-btn:#2B0A12; --shadow:rgba(0,0,0,.4); color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#151826; --fg:#F7E9EE; --muted:#B9AAC4; --card:#241F36; --surface:#2E2842;
-  --pink:#E58FA6; --red:#FF6B7D; --blue:#2A3D63; --line:#3B3350;
-  --hero:#4A2A47; --on-hero:#FCE4EA; --tile:#2E2442; --num:#FF8A98;
-  --btn:#FF6B7D; --on-btn:#2B0A12; --shadow:rgba(0,0,0,.35); color-scheme:dark}
+  --bg:#1A1528; --fg:#FFEFF5; --muted:#C4B3CF; --card:#34204A; --surface:#3F2B58;
+  --pink:#FF8FB4; --red:#FF6B8B; --blue:#2F4A7A; --line:#55346E;
+  --hero:#7A2F6A; --on-hero:#FFE3EE; --tile:#3F2B58; --num:#FF9BB5;
+  --btn:#FF6B8B; --on-btn:#2B0A12; --shadow:rgba(0,0,0,.4); color-scheme:dark}
 
 *{box-sizing:border-box}
 html,body{min-height:100%}
