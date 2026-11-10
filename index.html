@@ -152,6 +152,10 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 .who{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
 .who button{background:var(--card);border:3px solid var(--pink);border-radius:26px;padding:18px 26px;font-family:var(--display);font-size:34px;font-weight:700;color:var(--fg)}
 
+.note-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.note .acts{display:flex;gap:6px;flex:none}
+.note .icon-btn{background:var(--card);width:30px;height:30px;font-size:14px}
+.note .icon-btn.warn{background:var(--btn);width:auto;font-size:13px}
 .who button.guest{font-size:26px;border-style:dashed}
 .who-note{max-width:300px;font-weight:600}
 /* overlay + fx */
@@ -410,18 +414,21 @@ function latestNote(from){
   for(var i=0;i<S.notes.length;i++){if(S.notes[i].from===from)return S.notes[i]}
   return null;
 }
+function noteActs(n){
+  return '<span class="acts"><button class="icon-btn" data-act="edit-note" data-id="'+esc(n.id)+'" aria-label="Edit note">✏️</button><button class="icon-btn" data-act="del" data-col="notes" data-id="'+esc(n.id)+'" aria-label="Delete note">🗑️</button></span>';
+}
 function noteBlock(from){
   var n=latestNote(from),mine=from===S.me;
   if(!n)return '<div class="note mine"><span class="label">'+(mine?'You':esc(from))+'</span><p class="muted">'+(mine?'Nothing yet. Leave '+esc(other())+' a note.':esc(from)+' has not left a note yet.')+'</p></div>';
-  return '<div class="note'+(mine?' mine':'')+'"><span class="label">'+(mine?'You left a note':esc(from)+' left you a note')+' · '+ago(n.createdAt)+'</span><p>'+esc(n.text)+'</p></div>';
+  return '<div class="note'+(mine?' mine':'')+'"><div class="note-head"><span class="label">'+(mine?'You left a note':esc(from)+' left you a note')+' · '+ago(n.createdAt)+'</span>'+noteActs(n)+'</div><p>'+esc(n.text)+'</p></div>';
 }
 function notesCard(){
   var hist=S.notes.filter(function(n){return n!==latestNote(n.from)});
   var canWrite=!!S.db;
   return '<div class="card"><div class="sec-title"><h2>Notes</h2><button class="btn small" data-act="note"'+(canWrite?'':' disabled')+'>Write a note</button></div><div class="stack">'+
     noteBlock(other())+noteBlock(S.me)+'</div>'+
-    (hist.length?'<details style="margin-top:8px"><summary>Older notes ('+hist.length+')</summary><div class="stack">'+hist.slice(0,20).map(function(n){
-      return '<div class="note"><span class="label">'+esc(n.from)+' · '+ago(n.createdAt)+'</span><p>'+esc(n.text)+'</p></div>'}).join('')+'</div></details>':'')+'</div>';
+    (hist.length?'<details style="margin-top:8px"><summary>Older notes ('+hist.length+')</summary><div class="stack">'+hist.map(function(n){
+      return '<div class="note"><div class="note-head"><span class="label">'+esc(n.from)+' · '+ago(n.createdAt)+'</span>'+noteActs(n)+'</div><p>'+esc(n.text)+'</p></div>'}).join('')+'</div></details>':'')+'</div>';
 }
 function miniCountdowns(){
   var up=upcoming().slice(0,3);
@@ -565,9 +572,10 @@ function planSheet(p){
     '<div class="btns"><button class="btn ghost" data-act="close">Cancel</button><button class="btn" data-act="save-plan" data-id="'+(edit?esc(p.id):'')+'">Save</button></div>');
   w.dataset.emoji=edit?p.emoji:'💖';
 }
-function noteSheet(){
-  var w=openSheet('<h2>Note for '+esc(other())+'</h2><div class="field"><label for="f-note" class="muted">Up to 280 characters</label><textarea id="f-note" maxlength="280"></textarea><span class="muted" id="cnt" style="text-align:right">0 / 280</span></div>'+
-    '<div class="btns"><button class="btn ghost" data-act="close">Cancel</button><button class="btn" data-act="save-note">Send</button></div>');
+function noteSheet(n){
+  var edit=!!n,txt=edit?n.text:'';
+  var w=openSheet('<h2>'+(edit?'Edit note':'Note for '+esc(other()))+'</h2><div class="field"><label for="f-note" class="muted">Up to 280 characters</label><textarea id="f-note" maxlength="280">'+esc(txt)+'</textarea><span class="muted" id="cnt" style="text-align:right">'+txt.length+' / 280</span></div>'+
+    '<div class="btns"><button class="btn ghost" data-act="close">Cancel</button><button class="btn" data-act="save-note" data-id="'+(edit?esc(n.id):'')+'">'+(edit?'Save':'Send')+'</button></div>');
   $('#f-note',w).addEventListener('input',function(e){$('#cnt',w).textContent=e.target.value.length+' / 280'});
 }
 
@@ -653,10 +661,13 @@ var actions={
     guard(sb.from(el.dataset.col).delete().eq('id',el.dataset.id),null,el.dataset.col);
   },
   note:function(){noteSheet()},
-  'save-note':function(){
+  'edit-note':function(el){noteSheet(getById(S.notes,el.dataset.id))},
+  'save-note':function(el){
     var t=$('#f-note').value.trim();
     if(!t){toast('Write something first.');return}
-    guard(sb.from('notes').insert({id:uid(),body:t.slice(0,280),from_name:S.me,created_at:Date.now()}),null,'notes').then(function(r){if(r){closeSheet();toast('Note sent 💌')}});
+    var nid=el.dataset.id;
+    var q=nid?sb.from('notes').update({body:t.slice(0,280)}).eq('id',nid):sb.from('notes').insert({id:uid(),body:t.slice(0,280),from_name:S.me,created_at:Date.now()});
+    guard(q,null,'notes').then(function(r){if(r){closeSheet();toast(nid?'Note updated':'Note sent 💌')}});
   }
 };
 document.addEventListener('click',function(e){
