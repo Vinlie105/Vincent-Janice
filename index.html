@@ -43,6 +43,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 
 /* header */
 .top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 2px 0}
+.top-end{display:flex;flex-direction:column;align-items:center;gap:6px;flex:none}
 .top h1{font-family:var(--display);font-size:42px;line-height:1;color:var(--fg);text-wrap:balance}
 .top h1 .amp{color:var(--red)}
 .cat{width:34px;height:34px;color:var(--fg);flex:none}
@@ -470,7 +471,7 @@ function settingsView(){
 function appView(){
   var body={home:homeView,countdowns:countdownsView,list:listView,settings:settingsView}[S.tab]();
   var tabs=[['home','🏠','Home'],['countdowns','⏳','Countdowns'],['list','📝','Our list'],['settings','⚙️','Settings']];
-  return (S.tab==='home'?'<header class="top"><h1>Vincent <span class="amp">&amp;</span> Janice</h1>'+CAT+'</header>':'')+body+
+  return (S.tab==='home'?'<header class="top"><h1>Vincent <span class="amp">&amp;</span> Janice</h1><div class="top-end">'+CAT+'<button class="btn ghost small" data-act="logout">Log out</button></div></header>':'')+body+
     '<nav class="tabs" aria-label="Sections"><div>'+tabs.map(function(t){
       return '<button data-act="tab" data-v="'+t[0]+'"'+(S.tab===t[0]?' aria-current="page"':'')+'><span aria-hidden="true">'+t[1]+'</span>'+t[2]+'</button>'}).join('')+'</div></nav>';
 }
