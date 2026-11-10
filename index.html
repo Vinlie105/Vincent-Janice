@@ -325,7 +325,7 @@ applyTheme();
 
 function codeFor(who){
   if(who==='Guest')return (S.codes&&S.codes.Guest)||'';
-  return (S.codes&&S.codes[who])||S.passcode||'';
+  return S.passcode||'';
 }
 function isUnlocked(){var c=S.me?codeFor(S.me):'';return !!c&&store.get('vj_pc')===c}
 function myTz(){return CFG.tz[S.me]||'Asia/Singapore'}
@@ -711,7 +711,7 @@ function installBlock(){
 function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="switch">Switch user</button><button class="btn small" data-act="logout">Log out</button></div></div>'+
-    '<div class="card stack"><b>Your passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits. Only you use this one.</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save my passcode</button></div></div>'+
+    '<div class="card stack"><b>Our passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits. The same for Vincent and Janice. Never share it with guests.</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save our passcode</button></div></div>'+
     '<div class="card stack"><b>Guest code</b><div class="field"><label for="newgc" class="muted">Guests need their own code to see memories and photos. Until you set one, guests cannot log in.</label><input id="newgc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="saveguest"'+(S.db?'':' disabled')+'>Save guest code</button></div></div>'+
     '<div class="card stack"><b>Notifications</b>'+notifBlock()+'</div>'+
     '<div class="card stack"><b>Install the app</b>'+installBlock()+'</div>'+
@@ -994,8 +994,8 @@ var actions={
   savepc:function(){
     var v=$('#newpc').value.trim();
     if(!/^\d{4,6}$/.test(v)){toast('Use 4 to 6 digits.');return}
-    guard(sb.from('settings').upsert({key:'passcode_'+S.me.toLowerCase(),value:v,changed_by:S.me})).then(function(r){
-      if(r!==null){S.codes[S.me]=v;store.set('vj_pc',v);toast('Your passcode is changed.');render()}
+    guard(sb.from('settings').upsert({key:'passcode',value:v,changed_by:S.me})).then(function(r){
+      if(r!==null){S.passcode=v;store.set('vj_pc',v);toast('Passcode changed for both of you.');render()}
     });
   },
   saveguest:function(){
