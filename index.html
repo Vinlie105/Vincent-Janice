@@ -310,7 +310,7 @@ function reduced(){return document.documentElement.dataset.motion==='reduced'}
 var S={
   db:null,dbState:'loading',booted:false,
   countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',cq:[],pushOn:false,pushWho:'',pingAt:0,notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
-  passcode:'',
+  passcode:'',codes:{},codesReady:false,pending:'',
   me:store.get('vj_me'),
   tab:'home',editList:false,entered:'',
   rendered:'',confettiDone:{},dayAnimated:false
@@ -323,7 +323,8 @@ function applyTheme(){
 }
 applyTheme();
 
-function isUnlocked(){return !!S.passcode&&store.get('vj_pc')===S.passcode}
+function codeFor(who){return (S.codes&&S.codes[who])||S.passcode||''}
+function isUnlocked(){var c=S.me?codeFor(S.me):'';return !!c&&store.get('vj_pc')===c}
 function myTz(){return CFG.tz[S.me]||'Asia/Singapore'}
 function other(){return S.me==='Vincent'?'Janice':'Vincent'}
 
@@ -406,7 +407,14 @@ var MAP={
   checkins:function(r){return {id:r.id,who:r.who,day:r.day,mood:r.mood,note:r.mood_note,at:r.created_at}}
 };
 function applyRows(table,rows){
-  if(table==='settings'){var pc=rows.filter(function(r){return r.key==='passcode'})[0];if(pc&&pc.value)S.passcode=String(pc.value);return}
+  if(table==='settings'){
+    var codes={};
+    rows.forEach(function(r){if(r.key&&r.key.indexOf('passcode')===0&&r.value)codes[r.key]=String(r.value)});
+    S.passcode=codes.passcode||S.passcode;
+    S.codes={Vincent:codes.passcode_vincent||'',Janice:codes.passcode_janice||'',Guest:codes.passcode_guest||''};
+    S.codesReady=true;
+    return;
+  }
   if(table==='countdowns')S.countdowns=rows.map(MAP.countdowns).filter(function(c){return !isNaN(c.ts)});
   if(table==='plans')S.plans=rows.map(MAP.plans).sort(function(a,b){return (a.order||0)-(b.order||0)});
   if(table==='checkins'){S.checkins=rows.map(MAP.checkins);S.ciLoaded=true}
@@ -700,7 +708,8 @@ function installBlock(){
 function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="switch">Switch user</button><button class="btn small" data-act="logout">Log out</button></div></div>'+
-    '<div class="card stack"><b>Change passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits, used on both phones</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save passcode</button></div></div>'+
+    '<div class="card stack"><b>Your passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits. Only you use this one.</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save my passcode</button></div></div>'+
+    '<div class="card stack"><b>Guest code</b><div class="field"><label for="newgc" class="muted">What guests type to see memories and photos.</label><input id="newgc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="saveguest"'+(S.db?'':' disabled')+'>Save guest code</button></div></div>'+
     '<div class="card stack"><b>Notifications</b>'+notifBlock()+'</div>'+
     '<div class="card stack"><b>Install the app</b>'+installBlock()+'</div>'+
     '<div class="card stack"><b>Theme</b><div class="seg" role="group" aria-label="Theme">'+[['light','Pink'],['dark','Night'],['auto','Match phone']].map(function(t){return '<button data-act="theme" data-v="'+t[0]+'" aria-pressed="'+(curTheme()===t[0])+'">'+t[1]+'</button>'}).join('')+'</div></div>'+
@@ -809,11 +818,11 @@ function gamesView(){
   return playMenu();
 }
 function gateView(){
-  var len=S.passcode.length,dots='';
+  var len=codeFor(S.pending).length||4,dots='';
   for(var i=0;i<len;i++)dots+='<i class="'+(i<S.entered.length?'on':'')+'"></i>';
   var keys='123456789'.split('').concat(['','0','⌫']).map(function(k){
     return k===''?'<span></span>':'<button data-act="key" data-v="'+k+'" aria-label="'+(k==='⌫'?'Delete':k)+'">'+k+'</button>'}).join('');
-  return '<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted" style="font-weight:700">Passcode, please</p><div class="dots" id="dots" aria-hidden="true">'+dots+'</div><div class="pad">'+keys+'</div></div>';
+  return '<div class="gate"><h1>Hi, '+esc(S.pending)+' 💗</h1><p class="muted" style="font-weight:700">Your passcode, please</p><div class="dots" id="dots" aria-hidden="true">'+dots+'</div><div class="pad">'+keys+'</div><button class="btn ghost small" data-act="gate-back">Not you?</button></div>';
 }
 function whoView(){
   return '<div class="gate"><h1>Who are you?</h1><div class="who"><button data-act="who" data-v="Vincent">Vincent</button><button data-act="who" data-v="Janice">Janice</button><button class="guest" data-act="who" data-v="Guest">Guest</button></div><p class="muted who-note">Guests only see our memories and photos.</p></div>';
@@ -834,9 +843,9 @@ function render(){
   var app=$('#app');
   var ae=document.activeElement,keepId=ae&&ae.id&&app.contains(ae)?ae.id:null,keepVal=keepId?ae.value:null;
   if(!S.booted){app.innerHTML='<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted">Opening…</p></div>';return}
-  if(!S.passcode){app.innerHTML='<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted">'+(S.dbState==='error'||S.dbState==='none'?'Can’t reach the shared data. Check your connection and refresh.':'Opening…')+'</p></div>';return}
-  if(!isUnlocked()){app.innerHTML=gateView();return}
-  if(!S.me){app.innerHTML=whoView();return}
+  if(!S.codesReady){app.innerHTML='<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted">'+(S.dbState==='error'||S.dbState==='none'?'Can’t reach the shared data. Check your connection and refresh.':'Opening…')+'</p></div>';return}
+  if(S.me&&!isUnlocked()){S.pending=S.me;S.me=null;S.entered=''}
+  if(!S.me){app.innerHTML=S.pending?gateView():whoView();return}
   if(S.me==='Guest'){app.innerHTML=guestView();$('#layer').innerHTML='';S.rendered=renderKey();return}
   app.innerHTML=appView();
   $('#layer').innerHTML=hereOverlay();
@@ -921,15 +930,20 @@ var actions={
   tab:function(el){S.tab=el.dataset.v;S.editList=false;render();window.scrollTo(0,0)},
   hearts:function(el){var r=el.getBoundingClientRect();burst(['💖','🩷','❤️','💗'],10,r.left+60,r.top+30)},
   key:function(el){
-    var k=el.dataset.v;
+    var k=el.dataset.v,code=codeFor(S.pending);
+    if(!S.pending||!code)return;
     if(k==='⌫')S.entered=S.entered.slice(0,-1);else S.entered+=k;
-    if(S.entered.length>=S.passcode.length){
-      if(S.entered===S.passcode){store.set('vj_pc',S.passcode);S.entered='';render()}
-      else{S.entered='';render();var d=$('#dots');if(d){d.classList.add('shake');setTimeout(function(){d.classList.remove('shake')},400)}}
+    if(S.entered.length>=code.length){
+      if(S.entered===code){
+        S.me=S.pending;S.pending='';S.entered='';
+        store.set('vj_me',S.me);store.set('vj_pc',code);
+        render();
+      }else{S.entered='';render();var d=$('#dots');if(d){d.classList.add('shake');setTimeout(function(){d.classList.remove('shake')},400)}}
     }else render();
   },
-  who:function(el){S.me=el.dataset.v;store.set('vj_me',S.me);render()},
-  switch:function(){pushOff();closePop();S.me=null;store.del('vj_me');render()},
+  'gate-back':function(){S.pending='';S.entered=''},
+  who:function(el){S.pending=el.dataset.v;S.entered='';render()},
+  switch:function(){pushOff();closePop();S.me=null;S.pending='';S.entered='';store.del('vj_me');store.del('vj_pc');render()},
   theme:function(el){store.set('vj_theme',el.dataset.v);applyTheme();render()},
   ping:function(){
     if(!sb)return;
@@ -967,7 +981,7 @@ var actions={
   'cio-note':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();noteSheet()},
   'pop-ok':function(el){store.set(seenKey(),el.dataset.ts);closePop()},
   'pop-reply':function(el){store.set(seenKey(),el.dataset.ts);closePop();noteSheet()},
-  logout:function(){pushOff();closePop();store.del('vj_pc');store.del('vj_me');S.me=null;S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
+  logout:function(){pushOff();closePop();store.del('vj_pc');store.del('vj_me');S.me=null;S.pending='';S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
   motion:function(){
     if(reduced()){delete document.documentElement.dataset.motion;store.set('vj_motion','')}
     else{document.documentElement.dataset.motion='reduced';store.set('vj_motion','reduced')}
@@ -976,8 +990,15 @@ var actions={
   savepc:function(){
     var v=$('#newpc').value.trim();
     if(!/^\d{4,6}$/.test(v)){toast('Use 4 to 6 digits.');return}
-    guard(sb.from('settings').upsert({key:'passcode',value:v,changed_by:S.me})).then(function(r){
-      if(r!==null){store.set('vj_pc',v);S.passcode=v;toast('Passcode changed. Tell '+other()+'.');render()}
+    guard(sb.from('settings').upsert({key:'passcode_'+S.me.toLowerCase(),value:v,changed_by:S.me})).then(function(r){
+      if(r!==null){S.codes[S.me]=v;store.set('vj_pc',v);toast('Your passcode is changed.');render()}
+    });
+  },
+  saveguest:function(){
+    var v=$('#newgc').value.trim();
+    if(!/^\d{4,6}$/.test(v)){toast('Use 4 to 6 digits.');return}
+    guard(sb.from('settings').upsert({key:'passcode_guest',value:v,changed_by:S.me})).then(function(r){
+      if(r!==null){S.codes.Guest=v;toast('Guest code changed.');render()}
     });
   },
   here:function(){store.set('vj_here','1');$('#layer').innerHTML=''},
