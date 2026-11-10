@@ -309,7 +309,7 @@ function reduced(){return document.documentElement.dataset.motion==='reduced'}
 /* ---------- state ---------- */
 var S={
   db:null,dbState:'loading',booted:false,
-  countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',cq:[],notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
+  countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',cq:[],pushOn:false,pushWho:'',pingAt:0,notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
   passcode:'',
   me:store.get('vj_me'),
   tab:'home',editList:false,entered:'',
@@ -597,7 +597,7 @@ function noteBlock(from){
 function notesCard(){
   var hist=S.notes.filter(function(n){return n!==latestNote(n.from)});
   var canWrite=!!S.db;
-  return '<div class="card"><div class="sec-title"><h2>Notes</h2><button class="btn small" data-act="note"'+(canWrite?'':' disabled')+'>Write a note</button></div><div class="stack">'+
+  return '<div class="card"><div class="sec-title"><h2>Notes</h2><div style="display:flex;gap:8px"><button class="btn ghost small" data-act="ping"'+(canWrite?'':' disabled')+'>Ping 💗</button><button class="btn small" data-act="note"'+(canWrite?'':' disabled')+'>Write a note</button></div></div><div class="stack">'+
     noteBlock(other())+noteBlock(S.me)+'</div>'+
     (hist.length?'<details style="margin-top:8px"><summary>Older notes ('+hist.length+')</summary><div class="stack">'+hist.map(function(n){
       return '<div class="note"><div class="note-head"><span class="label">'+esc(n.from)+' · '+ago(n.createdAt)+'</span>'+noteActs(n)+'</div><p>'+esc(n.text)+'</p></div>'}).join('')+'</div></details>':'')+'</div>';
@@ -640,6 +640,57 @@ function listView(){
     '<div class="stack">'+(n?S.plans.map(function(p,i){return planRow(p,i,n)}).join(''):'<div class="card"><p class="empty">The list is empty. Add the first thing you want to do in December.</p></div>')+'</div>'+
     '<div class="btns" style="justify-content:space-between"><button class="btn ghost small" data-act="toggle-edit">'+(S.editList?'Done editing':'Edit list')+'</button><button class="btn" data-act="add-plan"'+(S.db?'':' disabled')+'>+ Add</button></div>';
 }
+function pushSupport(){return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window}
+function b64ToBytes(str){
+  var pad='='.repeat((4-str.length%4)%4),b64=(str+pad).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(b64),out=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+  return out;
+}
+function savePushSub(sub){
+  var j=sub.toJSON();
+  return sb.from('push_subs').upsert({endpoint:j.endpoint,who:S.me,p256dh:j.keys.p256dh,auth:j.keys.auth,created_at:Date.now()});
+}
+function enablePush(){
+  if(!sb||!AC.vapidPublicKey||CFG.names.indexOf(S.me)<0){toast('Log in as Vincent or Janice first.');return}
+  Notification.requestPermission().then(function(perm){
+    if(perm!=='granted'){toast('Notifications stay off.');render();return}
+    return navigator.serviceWorker.ready.then(function(reg){
+      return reg.pushManager.getSubscription().then(function(sub){
+        return sub||reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToBytes(AC.vapidPublicKey)});
+      });
+    }).then(function(sub){return savePushSub(sub)}).then(function(res){
+      if(res&&res.error)throw res.error;
+      S.pushOn=true;S.pushWho=S.me;toast('Notifications on 💗');render();
+    });
+  }).catch(function(){toast('Could not turn on notifications.')});
+}
+function syncPush(){
+  if(!sb||!S.pushOn||CFG.names.indexOf(S.me)<0||S.pushWho===S.me)return;
+  S.pushWho=S.me;
+  navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription()}).then(function(sub){
+    if(sub)return savePushSub(sub);
+  }).catch(function(){S.pushWho=''});
+}
+function pushOff(){
+  if(!sb||!S.pushOn||!pushSupport())return;
+  S.pushWho='';
+  navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription()}).then(function(sub){
+    if(sub)return sb.from('push_subs').delete().eq('endpoint',sub.endpoint);
+  }).catch(function(){});
+}
+function checkPushState(){
+  if(!pushSupport())return;
+  navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription()}).then(function(sub){
+    S.pushOn=!!sub&&Notification.permission==='granted';render();
+  }).catch(function(){});
+}
+function notifBlock(){
+  if(!AC.vapidPublicKey)return '<p class="muted" style="font-weight:700">Notifications are not set up yet.</p>';
+  if(!pushSupport())return '<p class="muted" style="font-weight:700">On iPhone: add the app to your Home Screen first (Share, then Add to Home Screen), then open it from there.</p>';
+  if(Notification.permission==='denied')return '<p class="muted" style="font-weight:700">Notifications are blocked. Turn them on in your phone Settings, Notifications, V&amp;J.</p>';
+  if(S.pushOn)return '<p class="muted" style="font-weight:700">On ✓ You get pings for notes, check-ins, games and more.</p><div><button class="btn ghost small" data-act="push-test">Send a test</button></div>';
+  return '<p class="muted" style="font-weight:700">Get a ping on this phone for notes, check-ins, games and more.</p><div><button class="btn small" data-act="push-on">Turn on notifications</button></div>';
+}
 function isInstalled(){return (window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true}
 function installBlock(){
   if(isInstalled())return '<p class="muted" style="font-weight:700">Installed ✓ You are using the app.</p>';
@@ -650,6 +701,7 @@ function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="switch">Switch user</button><button class="btn small" data-act="logout">Log out</button></div></div>'+
     '<div class="card stack"><b>Change passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits, used on both phones</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save passcode</button></div></div>'+
+    '<div class="card stack"><b>Notifications</b>'+notifBlock()+'</div>'+
     '<div class="card stack"><b>Install the app</b>'+installBlock()+'</div>'+
     '<div class="card stack"><b>Theme</b><div class="seg" role="group" aria-label="Theme">'+[['light','Pink'],['dark','Night'],['auto','Match phone']].map(function(t){return '<button data-act="theme" data-v="'+t[0]+'" aria-pressed="'+(curTheme()===t[0])+'">'+t[1]+'</button>'}).join('')+'</div></div>'+
     '<div class="card"><div class="seg"><button data-act="motion" aria-pressed="'+reduced()+'">Reduced motion: '+(reduced()?'on':'off')+'</button></div></div>'+
@@ -689,7 +741,7 @@ function c4Move(col){
   for(var r=C4_ROWS-1;r>=0;r--){if(b[r*C4_COLS+col]==='.'){row=r;break}}
   if(row<0)return;
   b[row*C4_COLS+col]=c4Piece(S.me);
-  var upd={board:b.join(''),turn:other(),updated_at:Date.now()};
+  var upd={board:b.join(''),turn:other(),last_by:S.me,updated_at:Date.now()};
   if(c4Win(b)){
     upd.winner=S.me;
     if(S.me==='Vincent')upd.vincent_wins=g.vw+1;else upd.janice_wins=g.jw+1;
@@ -703,7 +755,7 @@ function c4Move(col){
 function c4NewGame(){
   var g=S.game;if(!g||!sb)return;
   var next=g.starter==='Vincent'?'Janice':'Vincent';
-  guard(sb.from('game').update({board:new Array(C4_ROWS*C4_COLS+1).join('.'),turn:next,starter:next,winner:null,updated_at:Date.now()}).eq('id','c4'),null,'game');
+  guard(sb.from('game').update({board:new Array(C4_ROWS*C4_COLS+1).join('.'),turn:next,starter:next,winner:null,last_by:S.me,updated_at:Date.now()}).eq('id','c4'),null,'game');
 }
 function gameStatus(g){
   if(g.winner==='draw')return 'A draw. Rematch?';
@@ -805,6 +857,7 @@ function render(){
   maybeCheckIn();
   checkOtherMood();
   checkNewNote();
+  syncPush();
 }
 function tick(){
   if(!S.booted||!isUnlocked()||!S.me)return;
@@ -876,8 +929,21 @@ var actions={
     }else render();
   },
   who:function(el){S.me=el.dataset.v;store.set('vj_me',S.me);render()},
-  switch:function(){closePop();S.me=null;store.del('vj_me');render()},
+  switch:function(){pushOff();closePop();S.me=null;store.del('vj_me');render()},
   theme:function(el){store.set('vj_theme',el.dataset.v);applyTheme();render()},
+  ping:function(){
+    if(!sb)return;
+    var now=Date.now();
+    if(now-S.pingAt<8000){toast('One ping at a time 💗');return}
+    S.pingAt=now;
+    guard(sb.from('pings').insert({id:uid(),from_name:S.me,kind:'ping',text:'',created_at:now}),'Could not send the ping.').then(function(ok){
+      if(ok){toast('Ping sent 💗');burst(['💗','🩷'],8)}
+    });
+  },
+  'push-on':function(){enablePush()},
+  'push-test':function(){
+    navigator.serviceWorker.ready.then(function(reg){return reg.showNotification('Test ping 💗',{body:'Notifications are working.',icon:'icons/icon-192.png',badge:'icons/icon-192.png'})}).catch(function(){toast('Could not show a test.')});
+  },
   install:function(){if(installEvt){installEvt.prompt();installEvt=null;render()}},
   'play-menu':function(){S.play='menu'},
   'play-open':function(el){S.play=el.dataset.v},
@@ -901,7 +967,7 @@ var actions={
   'cio-note':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();noteSheet()},
   'pop-ok':function(el){store.set(seenKey(),el.dataset.ts);closePop()},
   'pop-reply':function(el){store.set(seenKey(),el.dataset.ts);closePop();noteSheet()},
-  logout:function(){closePop();store.del('vj_pc');store.del('vj_me');S.me=null;S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
+  logout:function(){pushOff();closePop();store.del('vj_pc');store.del('vj_me');S.me=null;S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
   motion:function(){
     if(reduced()){delete document.documentElement.dataset.motion;store.set('vj_motion','')}
     else{document.documentElement.dataset.motion='reduced';store.set('vj_motion','reduced')}
@@ -910,7 +976,7 @@ var actions={
   savepc:function(){
     var v=$('#newpc').value.trim();
     if(!/^\d{4,6}$/.test(v)){toast('Use 4 to 6 digits.');return}
-    guard(sb.from('settings').upsert({key:'passcode',value:v})).then(function(r){
+    guard(sb.from('settings').upsert({key:'passcode',value:v,changed_by:S.me})).then(function(r){
       if(r!==null){store.set('vj_pc',v);S.passcode=v;toast('Passcode changed. Tell '+other()+'.');render()}
     });
   },
@@ -990,10 +1056,11 @@ var installEvt=null;
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();installEvt=e;if(S.tab==='settings'&&S.me)render()});
 window.addEventListener('appinstalled',function(){installEvt=null;render()});
 if('serviceWorker' in navigator)window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
-var CG=window.VJ_GAMES?window.VJ_GAMES.create({S:S,esc:esc,store:store,toast:toast,burst:burst,uid:uid,render:function(){render()},custom:function(){return S.cq},addQ:function(row){return sb?guard(sb.from('custom_questions').insert(row),'Could not save the question.','custom_questions'):Promise.resolve(null)},delQ:function(id){if(sb)guard(sb.from('custom_questions').delete().eq('id',id),null,'custom_questions')}}):null;
+var CG=window.VJ_GAMES?window.VJ_GAMES.create({S:S,esc:esc,store:store,toast:toast,burst:burst,uid:uid,render:function(){render()},invite:function(text){return sb?guard(sb.from('pings').insert({id:uid(),from_name:S.me,kind:'invite',text:text,created_at:Date.now()}),'Could not send the invite.'):Promise.resolve(null)},custom:function(){return S.cq},addQ:function(row){return sb?guard(sb.from('custom_questions').insert(row),'Could not save the question.','custom_questions'):Promise.resolve(null)},delQ:function(id){if(sb)guard(sb.from('custom_questions').delete().eq('id',id),null,'custom_questions')}}):null;
 render();
 setInterval(tick,1000);
 connect();
+checkPushState();
 })();
 </script>
 </body>

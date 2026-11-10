@@ -1,6 +1,6 @@
 // sw.js: lets the site install as an app and open even with a weak connection.
 // Network first, so every open picks up the newest files. The cache is only a fallback.
-var CACHE = 'vj-shell-v1';
+var CACHE = 'vj-shell-v3';
 var SHELL = [
   './', 'index.html', 'config.js', 'questions.js', 'games.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'
@@ -44,5 +44,31 @@ self.addEventListener('fetch', function (event) {
         return caches.match(req.url, { ignoreSearch: true })
           .then(function (hit) { return hit || caches.match('index.html'); });
       })
+  );
+});
+
+// Push notifications: show what the server sent, and open the app when tapped.
+self.addEventListener('push', function (event) {
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'Vincent & Janice', {
+    body: data.body || '',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag: data.tag || undefined,
+    data: { url: data.url || './' }
+  }));
+});
+
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  var target = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        if ('focus' in list[i]) return list[i].focus();
+      }
+      return self.clients.openWindow(target);
+    })
   );
 });

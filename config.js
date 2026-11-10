@@ -11,5 +11,8 @@ window.APP_CONFIG = {
 
   // Safe to be public. Never put the service_role key here.
   supabaseUrl: "https://fpfeswlsyxqsslqpgbph.supabase.co",
-  supabaseAnonKey: "sb_publishable_lNz9pYhL4IFAr7CQfYbhLw_UnZOtxsm"
+  supabaseAnonKey: "sb_publishable_lNz9pYhL4IFAr7CQfYbhLw_UnZOtxsm",
+
+  // Public key for notifications. The private half lives only in Supabase.
+  vapidPublicKey: "BCToFc6E6dzYgXyBesKjqSUndYKYWZzK6OsPNecSD9E0XyP6qMP-q_jZ7oY62eoE96oBbxbP_pWlCe5inzXnU68"
 };

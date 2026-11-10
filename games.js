@@ -172,7 +172,7 @@
         '<div style="display:flex;gap:8px"><input id="cg-code" inputmode="numeric" maxlength="4" autocomplete="off" value="' + esc(G.code || '') + '"><button class="btn ghost small" data-act="cg-rand">Random</button></div></div>' +
         '<div><p class="label" style="margin-bottom:6px">Rounds</p>' + chips(ROUNDS, G.rounds, 'cg-rounds') + '</div>' + catBlock +
         '<p class="muted" style="font-size:13px">' + list.length + ' questions in this deck. Deck check <b class="fp">' + fingerprint(list) + '</b> should match on both phones.</p>' +
-        '<button class="btn" data-act="cg-start">Start</button></div>' + customView();
+        '<div class="cg-actions" style="justify-content:flex-start"><button class="btn" data-act="cg-start">Start</button><button class="btn ghost" data-act="cg-invite">Invite to play 🎲</button></div></div>' + customView();
     }
     function guessCard(q) {
       var subject = subjectOf(G.i);
@@ -311,6 +311,10 @@
       'cg-rounds': function (el) { G.rounds = +el.dataset.v; },
       'cg-cat': function (el) { G.cat = el.dataset.v; },
       'cg-start': function () { startGame(); },
+      'cg-invite': function () {
+        if (!/^\d{4}$/.test(G.code || '')) { toast('Enter a 4-digit room code first.'); return; }
+        ctx.invite(MODES[G.mode].name + ', room ' + G.code).then(function (ok) { if (ok) toast('Invite sent 🎲'); });
+      },
       'cg-lock': function () {
         if (!(G.draft || '').trim()) { toast('Write your answer first.'); return; }
         G.locked = true;
