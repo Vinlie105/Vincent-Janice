@@ -2,7 +2,7 @@
 window.APP_CONFIG = {
   names: ["Vincent", "Janice"],
   startDate: "2026-10-16",
-  birthdays: { Vincent: "02-01", Janice: "04-23" },
+  birthdays: { Vincent: "02-01", Janice: "03-23" },
   trip: {
     arrive: "2026-12-03T12:25:00+07:00",
     leave: "2026-12-22T14:15:00+07:00"

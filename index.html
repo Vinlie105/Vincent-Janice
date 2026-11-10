@@ -251,6 +251,12 @@ var S={
   rendered:'',confettiDone:{},dayAnimated:false
 };
 if(store.get('vj_motion')==='reduced')document.documentElement.dataset.motion='reduced';
+function curTheme(){return store.get('vj_theme')||'light'}
+function applyTheme(){
+  var v=curTheme(),r=document.documentElement;
+  if(v==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',v);
+}
+applyTheme();
 
 function isUnlocked(){return !!S.passcode&&store.get('vj_pc')===S.passcode}
 function myTz(){return CFG.tz[S.me]||'Asia/Singapore'}
@@ -472,6 +478,7 @@ function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="switch">Switch user</button><button class="btn small" data-act="logout">Log out</button></div></div>'+
     '<div class="card stack"><b>Change passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits, used on both phones</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save passcode</button></div></div>'+
+    '<div class="card stack"><b>Theme</b><div class="seg" role="group" aria-label="Theme">'+[['light','Pink'],['dark','Night'],['auto','Match phone']].map(function(t){return '<button data-act="theme" data-v="'+t[0]+'" aria-pressed="'+(curTheme()===t[0])+'">'+t[1]+'</button>'}).join('')+'</div></div>'+
     '<div class="card"><div class="seg"><button data-act="motion" aria-pressed="'+reduced()+'">Reduced motion: '+(reduced()?'on':'off')+'</button></div></div>'+
     '<p class="muted" style="font-size:13px;text-align:center">The passcode is a privacy curtain, not real security.</p>';
 }
@@ -599,6 +606,7 @@ var actions={
   },
   who:function(el){S.me=el.dataset.v;store.set('vj_me',S.me);render()},
   switch:function(){S.me=null;store.del('vj_me');render()},
+  theme:function(el){store.set('vj_theme',el.dataset.v);applyTheme();render()},
   logout:function(){store.del('vj_pc');store.del('vj_me');S.me=null;S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
   motion:function(){
     if(reduced()){delete document.documentElement.dataset.motion;store.set('vj_motion','')}
