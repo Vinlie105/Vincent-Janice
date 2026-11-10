@@ -231,6 +231,37 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 @keyframes rise{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
 @keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 @keyframes fly{0%{transform:translate(0,0) scale(.6);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--r)) scale(1);opacity:0}}
+/* motion: every rule below is switched off by the reduced-motion rules that follow */
+.mood button{transition:transform .15s,background .15s,border-color .15s}
+.mood button:active{transform:scale(.9)}
+.mood button[aria-pressed="true"]{transform:scale(1.08);animation:moodpop .5s cubic-bezier(.3,1.6,.5,1)}
+.bigmood{animation:moodpop .6s cubic-bezier(.3,1.6,.5,1) both}
+.enter>*:not(.tabs){animation-name:enterIn;animation-duration:.5s;animation-timing-function:cubic-bezier(.2,.7,.2,1);animation-fill-mode:both;animation-delay:calc(var(--d,0s) - var(--el,0s))}
+.enter>:nth-child(2){--d:.05s}.enter>:nth-child(3){--d:.1s}.enter>:nth-child(4){--d:.15s}.enter>:nth-child(5){--d:.2s}
+.enter>:nth-child(6){--d:.25s}.enter>:nth-child(7){--d:.3s}.enter>:nth-child(8){--d:.35s}.enter>:nth-child(9){--d:.4s}
+.enter>:nth-child(10){--d:.45s}.enter>:nth-child(11){--d:.5s}.enter>:nth-child(12){--d:.55s}.enter>:nth-child(n+13){--d:.6s}
+.tile b.flip{animation:numtick .45s ease-out}
+.c4{overflow:hidden}
+.disc.drop{animation:discdrop calc(.35s + var(--n,1)*.06s) both}
+.disc.win.pulse{animation:winpulse .8s ease-in-out 3}
+.disc.win.pulse.drop{animation:discdrop calc(.35s + var(--n,1)*.06s) both,winpulse .8s ease-in-out calc(.45s + var(--n,1)*.06s) 3}
+.check{transition:transform .15s,background .15s}
+.check.pop{animation:checkpop .45s cubic-bezier(.3,1.6,.5,1)}
+.check svg path{stroke-dasharray:1;stroke-dashoffset:0}
+.check.pop svg path{animation:checkdraw .35s .08s ease-out both}
+.pingpulse{position:absolute;inset:0;background:radial-gradient(circle at 50% 55%,rgba(255,79,147,.5),rgba(255,79,147,0) 65%);animation:pingpulse 1.8s ease-out forwards}
+.bigheart{position:absolute;left:50%;top:50%;margin:-.55em 0 0 -.55em;font-size:96px;line-height:1;animation:heartbeat 1.8s ease-out forwards}
+.floatup{position:absolute;left:var(--x);top:var(--y);font-size:30px;line-height:1;animation:floatup 1.7s ease-out var(--w,0s) both}
+@keyframes moodpop{0%{transform:scale(.7)}55%{transform:scale(1.35) rotate(-6deg)}100%{transform:scale(1.08)}}
+@keyframes enterIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes numtick{from{transform:translateY(-40%);opacity:.15}to{transform:none;opacity:1}}
+@keyframes discdrop{0%{transform:translateY(calc(var(--n,1)*(-100% - 6px)));animation-timing-function:cubic-bezier(.5,0,.9,.6)}62%{transform:none;animation-timing-function:ease-out}78%{transform:translateY(-12%)}100%{transform:none}}
+@keyframes winpulse{50%{transform:scale(1.14)}}
+@keyframes checkpop{0%{transform:scale(.7)}60%{transform:scale(1.25)}100%{transform:none}}
+@keyframes checkdraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes pingpulse{0%{opacity:0;transform:scale(.6)}25%{opacity:1}100%{opacity:0;transform:scale(1.4)}}
+@keyframes heartbeat{0%{transform:scale(.3);opacity:0}20%{transform:scale(1.2);opacity:1}32%{transform:scale(.95)}46%{transform:scale(1.15)}60%{transform:scale(1)}100%{transform:translateY(-50px) scale(1);opacity:0}}
+@keyframes floatup{0%{transform:translate(-50%,0) scale(.5);opacity:0}15%{opacity:1}100%{transform:translate(calc(-50% + var(--sx,0px)),-170px) scale(1.2);opacity:0}}
 :root[data-motion="reduced"] *{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (max-width:360px){.tile b{font-size:22px}.daynum{font-size:60px}.pad{grid-template-columns:repeat(3,64px)}}
@@ -305,6 +336,7 @@ function ago(ts){
 }
 function shortDate(ts){return new Date(ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'Asia/Jakarta'})}
 function reduced(){return document.documentElement.dataset.motion==='reduced'}
+function motionOff(){return reduced()||!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)}
 
 /* ---------- state ---------- */
 var S={
@@ -313,7 +345,8 @@ var S={
   passcode:'',codes:{},codesReady:false,pending:'',
   me:(['Vincent','Janice'].indexOf(store.get('vj_me'))>=0?store.get('vj_me'):null),
   tab:'home',editList:false,entered:'',
-  rendered:'',confettiDone:{},dayAnimated:false
+  rendered:'',confettiDone:{},dayAnimated:false,
+  pingSeen:0,lastView:'',enterAt:0,c4Seen:null,c4Fx:null,tickFx:null
 };
 if(store.get('vj_motion')==='reduced')document.documentElement.dataset.motion='reduced';
 function curTheme(){return store.get('vj_theme')||'light'}
@@ -373,7 +406,7 @@ function toast(msg){
   document.body.appendChild(t);setTimeout(function(){t.remove()},2600);
 }
 function burst(symbols,n,ox,oy){
-  if(reduced())return;
+  if(motionOff())return;
   var fx=$('#fx');
   for(var i=0;i<n;i++){
     var e=document.createElement('span');e.className='bit';
@@ -386,6 +419,34 @@ function burst(symbols,n,ox,oy){
   }
 }
 function confetti(){burst(['🎉','💖','✨','🌸','🎊','🩷'],42)}
+function fxAdd(cls,text,ms,style){
+  var fx=$('#fx');if(!fx)return;
+  var e=document.createElement('span');e.className=cls;e.textContent=text;
+  if(style)e.style.cssText=style;
+  fx.appendChild(e);setTimeout(function(){e.remove()},ms);
+}
+function floatHearts(x,y){
+  if(motionOff())return;
+  [['💗',0,-22],['🩷',.15,18],['💖',.3,-4]].forEach(function(h){
+    fxAdd('floatup',h[0],2300,'--x:'+x+'px;--y:'+y+'px;--w:'+h[1]+'s;--sx:'+h[2]+'px');
+  });
+}
+function pingArrived(from){
+  toast(from+' sent you a ping 💗');
+  if(motionOff())return;
+  fxAdd('pingpulse','',2000);
+  fxAdd('bigheart','💗',2000);
+}
+function checkPings(){
+  if(!sb||!S.me||!isUnlocked()||CFG.names.indexOf(S.me)<0||document.hidden)return;
+  if(!S.pingSeen)S.pingSeen=Date.now()-60000;
+  Promise.resolve(sb.from('pings').select('from_name,created_at').eq('kind','ping').neq('from_name',S.me).gt('created_at',S.pingSeen).order('created_at',{ascending:true})).then(function(res){
+    if(!res||res.error||!res.data||!res.data.length)return;
+    var last=res.data[res.data.length-1];
+    S.pingSeen=last.created_at;
+    pingArrived(last.from_name);
+  }).catch(function(){});
+}
 
 /* ---------- data (Supabase) ---------- */
 var sb=null;
@@ -444,11 +505,14 @@ function connect(){
   TABLES.forEach(function(t){
     sb.channel('rt-'+t).on('postgres_changes',{event:'*',schema:'public',table:t},function(){load(t)}).subscribe();
   });
-  document.addEventListener('visibilitychange',function(){if(!document.hidden)TABLES.forEach(load)});
+  sb.channel('rt-pings').on('postgres_changes',{event:'INSERT',schema:'public',table:'pings'},function(){checkPings()}).subscribe();
+  document.addEventListener('visibilitychange',function(){if(!document.hidden){TABLES.forEach(load);checkPings()}});
   setInterval(function(){if(!document.hidden)TABLES.forEach(load)},30000);
+  setInterval(checkPings,10000);
 }
 
 /* ---------- svg bits ---------- */
+var CHECK='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" pathLength="1"/></svg>';
 var CAT='<svg class="cat" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Luna the cat" role="img"><path d="M8 17V6l8 5h8l8-5v11c0 9-5 15-12 15S8 26 8 17Z"/><circle cx="15" cy="19" r="1.2" fill="currentColor"/><circle cx="25" cy="19" r="1.2" fill="currentColor"/><path d="M18 24l2 1.5 2-1.5"/></svg>';
 var FLOWER='<svg class="doodle" viewBox="0 0 100 100" fill="currentColor" aria-hidden="true"><circle cx="50" cy="26" r="16"/><circle cx="74" cy="44" r="16"/><circle cx="65" cy="72" r="16"/><circle cx="35" cy="72" r="16"/><circle cx="26" cy="44" r="16"/><circle cx="50" cy="50" r="10" fill="var(--hero)"/></svg>';
 
@@ -622,7 +686,8 @@ function countdownsView(){
 }
 function planRow(p,i,n){
   var ctl=S.editList?'<span class="acts"><button class="icon-btn" data-act="up" data-id="'+esc(p.id)+'" aria-label="Move up"'+(i===0?' disabled':'')+'>↑</button><button class="icon-btn" data-act="down" data-id="'+esc(p.id)+'" aria-label="Move down"'+(i===n-1?' disabled':'')+'>↓</button><button class="icon-btn" data-act="edit-plan" data-id="'+esc(p.id)+'" aria-label="Edit">✏️</button><button class="icon-btn" data-act="del" data-col="plans" data-id="'+esc(p.id)+'" aria-label="Delete">🗑️</button></span>':'';
-  return '<div class="row'+(p.done?' done':'')+'"><button class="check" role="checkbox" aria-checked="'+(!!p.done)+'" aria-label="'+esc(p.title)+'" data-act="tick" data-id="'+esc(p.id)+'">'+(p.done?'✓':'')+'</button>'+
+  var pop=!!(p.done&&S.tickFx&&S.tickFx.id===p.id&&Date.now()-S.tickFx.at<2000);
+  return '<div class="row'+(p.done?' done':'')+'"><button class="check'+(pop?' pop':'')+'" role="checkbox" aria-checked="'+(!!p.done)+'" aria-label="'+esc(p.title)+'" data-act="tick" data-id="'+esc(p.id)+'">'+(p.done?CHECK:'')+'</button>'+
     '<span class="em">'+esc(p.emoji)+'</span><div class="mid"><b>'+esc(p.title)+'</b>'+
     (p.done?'<small>done by '+esc(p.doneBy)+' · '+shortDate(p.doneAt)+'</small>':(p.note?'<small>'+esc(p.note)+'</small>':''))+'</div>'+ctl+'</div>';
 }
@@ -767,11 +832,19 @@ function c4View(){
   if(!g)return syncBanner()+'<h2 class="hand" style="font-size:38px">Play</h2><div class="card"><p class="empty">The game is not set up yet. Run the game SQL in Supabase.</p></div>';
   var b=g.board.split(''),res=g.winner&&g.winner!=='draw'?c4Win(b):null,win=res?res.cells:[];
   var mine=!g.winner&&g.turn===S.me,cols='';
+  var cur=g.board,drops=[],pulse=!!res&&Date.now()-g.upd<8000;
+  if(S.c4Fx&&S.c4Fx.board===cur&&Date.now()-S.c4Fx.at<1200)drops=S.c4Fx.idx;
+  else if(S.c4Seen&&S.c4Seen!==cur){
+    for(var i=0;i<cur.length;i++){if(cur.charAt(i)!=='.'&&S.c4Seen.charAt(i)==='.')drops.push(i)}
+    if(drops.length>2)drops=[];
+    S.c4Fx={board:cur,idx:drops,at:Date.now()};
+  }
+  S.c4Seen=cur;
   for(var c=0;c<C4_COLS;c++){
     var cells='',full=b[c]!=='.';
     for(var r=0;r<C4_ROWS;r++){
-      var ch=b[r*C4_COLS+c];
-      cells+='<i class="disc'+(ch==='V'?' v':ch==='J'?' j':'')+(win.indexOf(r*C4_COLS+c)>=0?' win':'')+'"></i>';
+      var ix=r*C4_COLS+c,ch=b[ix],isDrop=drops.indexOf(ix)>=0;
+      cells+='<i class="disc'+(ch==='V'?' v':ch==='J'?' j':'')+(win.indexOf(ix)>=0?' win'+(pulse?' pulse':''):'')+(isDrop?' drop':'')+'"'+(isDrop?' style="--n:'+(r+1)+'"':'')+'></i>';
     }
     cols+='<button class="col" data-act="col" data-v="'+c+'" aria-label="Drop in column '+(c+1)+'"'+(mine&&!full?'':' disabled')+'>'+cells+'</button>';
   }
@@ -834,8 +907,14 @@ function render(){
   if(!S.booted){app.innerHTML='<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted">Opening…</p></div>';return}
   if(!S.codesReady){app.innerHTML='<div class="gate"><h1>Vincent &amp; Janice</h1><p class="muted">'+(S.dbState==='error'||S.dbState==='none'?'Can’t reach the shared data. Check your connection and refresh.':'Opening…')+'</p></div>';return}
   if(S.me&&!isUnlocked()){S.pending=S.me;S.me=null;S.entered=''}
-  if(!S.me){app.innerHTML=S.pending?gateView():whoView();return}
+  if(!S.me){S.lastView='';app.classList.remove('enter');app.innerHTML=S.pending?gateView():whoView();return}
   app.innerHTML=appView();
+  var viewKey=S.tab+'|'+S.play,nowMs=Date.now();
+  if(S.lastView!==viewKey){S.lastView=viewKey;S.enterAt=nowMs}
+  var sinceEnter=nowMs-S.enterAt;
+  if(!motionOff()&&sinceEnter<1200){app.classList.add('enter');app.style.setProperty('--el',(sinceEnter/1000)+'s')}
+  else app.classList.remove('enter');
+  if(!(S.tab==='games'&&S.play==='c4'))S.c4Seen=null;
   $('#layer').innerHTML=hereOverlay();
   S.rendered=renderKey();
   tick();
@@ -862,7 +941,13 @@ function tick(){
   var now=Date.now();
   $$('.tiles[data-target]').forEach(function(t){
     var p=parts(+t.dataset.target-now);
-    ['d','h','m','s'].forEach(function(u){var el=t.querySelector('[data-unit="'+u+'"]');var v=String(p[u]);if(el.textContent!==v)el.textContent=v});
+    ['d','h','m','s'].forEach(function(u){
+      var el=t.querySelector('[data-unit="'+u+'"]'),v=String(p[u]),had=el.dataset.set;
+      el.dataset.set='1';
+      if(el.textContent===v)return;
+      el.textContent=v;
+      if(had&&u!=='s'&&!motionOff()){el.classList.remove('flip');void el.offsetWidth;el.classList.add('flip')}
+    });
   });
   $$('[data-rel]').forEach(function(e){e.textContent=rel(+e.dataset.rel)});
   $$('[data-clock]').forEach(function(e){e.textContent=clock(now,e.dataset.clock)});
@@ -933,13 +1018,13 @@ var actions={
   who:function(el){S.pending=el.dataset.v;S.entered='';render()},
   switch:function(){pushOff();closePop();S.me=null;S.pending='';S.entered='';store.del('vj_me');store.del('vj_pc');render()},
   theme:function(el){store.set('vj_theme',el.dataset.v);applyTheme();render()},
-  ping:function(){
+  ping:function(el){
     if(!sb)return;
-    var now=Date.now();
+    var now=Date.now(),r=el.getBoundingClientRect(),px=r.left+r.width/2,py=r.top;
     if(now-S.pingAt<8000){toast('One ping at a time 💗');return}
     S.pingAt=now;
     guard(sb.from('pings').insert({id:uid(),from_name:S.me,kind:'ping',text:'',created_at:now}),'Could not send the ping.').then(function(ok){
-      if(ok){toast('Ping sent 💗');burst(['💗','🩷'],8)}
+      if(ok){toast('Ping sent 💗');floatHearts(px,py)}
     });
   },
   pref:function(el){
@@ -970,11 +1055,12 @@ var actions={
   },
   'greet-skip':function(){showMood()},
   'mood-pick':function(el){S.mood=+el.dataset.v;$$('.mood button').forEach(function(b){b.setAttribute('aria-pressed',String(b===el))})},
-  'mood-save':function(){
-    var i=$('#mood-note'),text=i?i.value.trim().slice(0,120):'';
+  'mood-save':function(el){
+    var i=$('#mood-note'),text=i?i.value.trim().slice(0,120):'',r=el.getBoundingClientRect();
     markCiDone();
     if(!S.mood&&!text){closePop();return}
     saveCheckin(S.mood||null,text);
+    burst(['💗','🩷','💖'],14,r.left+r.width/2,r.top);
   },
   'mood-skip':function(){markCiDone();closePop()},
   'cio-ok':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();render()},
@@ -1026,8 +1112,10 @@ var actions={
   },
   tick:function(el){
     var p=getById(S.plans,el.dataset.id);if(!p||!S.db)return;
-    var done=!p.done;
-    guard(sb.from('plans').update({done:done,done_by:done?S.me:null,done_at:done?Date.now():null}).eq('id',p.id),null,'plans').then(function(){if(done)burst(['💖','✨'],8,el.getBoundingClientRect().left+17,el.getBoundingClientRect().top)});
+    var done=!p.done,r=el.getBoundingClientRect();
+    guard(sb.from('plans').update({done:done,done_by:done?S.me:null,done_at:done?Date.now():null}).eq('id',p.id),null,'plans').then(function(ok){
+      if(done&&ok){S.tickFx={id:p.id,at:Date.now()};burst(['💖','✨'],8,r.left+17,r.top)}
+    });
   },
   'toggle-edit':function(){S.editList=!S.editList;render()},
   up:function(el){var i=S.plans.findIndex(function(p){return p.id===el.dataset.id});if(i>0)savePlanOrder(S.plans[i],S.plans[i-1])},
