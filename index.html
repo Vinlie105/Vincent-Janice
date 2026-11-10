@@ -160,6 +160,17 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 .ci-dots i{flex:1;height:16px;border-radius:6px;background:var(--line);opacity:.55}
 .ci-dots i.on{background:var(--red);opacity:1}
 .ci-dots i.today{outline:2px solid var(--fg);outline-offset:1px}
+.pop-back{position:fixed;inset:0;background:rgba(40,10,30,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:70}
+.pop{background:var(--bg);color:var(--fg);width:100%;max-width:420px;border-radius:28px;padding:22px;display:flex;flex-direction:column;gap:12px;text-align:center;box-shadow:0 14px 40px var(--shadow);animation:rise .25s ease-out}
+.pop h2{font-family:var(--display);font-size:38px;line-height:1}
+.pop .note{text-align:left}
+.pop .btns{justify-content:center;flex-wrap:wrap}
+.mood{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.mood button{height:48px;border-radius:14px;border:2px solid var(--line);background:var(--surface);font:800 20px var(--body);color:var(--fg)}
+.mood button[aria-pressed="true"]{background:var(--btn);color:var(--on-btn);border-color:var(--btn)}
+.pop input{font:inherit;color:var(--fg);background:var(--surface);border:2px solid var(--line);border-radius:14px;padding:10px 12px;width:100%;min-width:0}
+.bigmood{font:800 56px/1 var(--body);color:var(--num)}
+.ci-note{font-weight:600;overflow-wrap:anywhere}
 .note-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .note .acts{display:flex;gap:6px;flex:none}
 .note .icon-btn{background:var(--card);width:30px;height:30px;font-size:14px}
@@ -186,6 +197,7 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 <div class="wrap" id="app"></div>
 <div id="fx" aria-hidden="true"></div>
 <div id="layer"></div>
+<div id="pop"></div>
 
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -252,7 +264,7 @@ function reduced(){return document.documentElement.dataset.motion==='reduced'}
 /* ---------- state ---------- */
 var S={
   db:null,dbState:'loading',booted:false,
-  countdowns:[],plans:[],notes:[],checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',
+  countdowns:[],plans:[],notes:[],notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
   passcode:'',
   me:store.get('vj_me'),
   tab:'home',editList:false,entered:'',
@@ -344,13 +356,14 @@ var MAP={
   countdowns:function(r){return {id:r.id,title:r.title,emoji:r.emoji,datetime:r.datetime,date:r.date,time:r.time,tz:r.tz,addedBy:r.added_by,createdAt:r.created_at,ts:Date.parse(r.datetime)}},
   plans:function(r){return {id:r.id,title:r.title,emoji:r.emoji,done:r.done,doneBy:r.done_by,doneAt:r.done_at,addedBy:r.added_by,note:r.note,order:r.sort_order}},
   notes:function(r){return {id:r.id,text:r.body,from:r.from_name,createdAt:r.created_at}},
-  checkins:function(r){return {id:r.id,who:r.who,day:r.day}}
+  checkins:function(r){return {id:r.id,who:r.who,day:r.day,mood:r.mood,note:r.mood_note,at:r.created_at}}
 };
 function applyRows(table,rows){
   if(table==='settings'){var pc=rows.filter(function(r){return r.key==='passcode'})[0];if(pc&&pc.value)S.passcode=String(pc.value);return}
   if(table==='countdowns')S.countdowns=rows.map(MAP.countdowns).filter(function(c){return !isNaN(c.ts)});
   if(table==='plans')S.plans=rows.map(MAP.plans).sort(function(a,b){return (a.order||0)-(b.order||0)});
   if(table==='checkins'){S.checkins=rows.map(MAP.checkins);S.ciLoaded=true}
+  if(table==='notes')S.notesLoaded=true;
   if(table==='notes')S.notes=rows.map(MAP.notes).sort(function(a,b){return b.createdAt-a.createdAt});
 }
 function load(table){
@@ -433,7 +446,7 @@ function latestNote(from){
 function pad2(n){return (n<10?'0':'')+n}
 function dayKey(ix){var d=new Date(ix*86400000);return d.getUTCFullYear()+'-'+pad2(d.getUTCMonth()+1)+'-'+pad2(d.getUTCDate())}
 function todayKeyFor(who){var t=ymd(Date.now(),CFG.tz[who]);return {key:t[0]+'-'+pad2(t[1])+'-'+pad2(t[2]),idx:dayIdx(t[0],t[1],t[2])}}
-function ciSet(who){var o={};S.checkins.forEach(function(c){if(c.who===who)o[c.day]=1});return o}
+function ciSet(who){var o={};S.checkins.forEach(function(c){if(c.who===who)o[c.day]=c});return o}
 function ciStreak(who){
   var set=ciSet(who),i=todayKeyFor(who).idx,n=0;
   if(!set[dayKey(i)])i-=1;
@@ -442,21 +455,60 @@ function ciStreak(who){
 }
 function checkinCard(){
   if(!S.ciLoaded)return '';
-  return '<div class="card"><div class="sec-title"><h2>Check-ins</h2><span class="pill">logged when you open the app</span></div><div class="stack">'+
+  return '<div class="card"><div class="sec-title"><h2>Check-ins</h2><span class="pill">asked once a day</span></div><div class="stack">'+
     CFG.names.map(function(who){
-      var set=ciSet(who),t=todayKeyFor(who),total=Object.keys(set).length,st=ciStreak(who),dots='';
-      for(var k=13;k>=0;k--){var key=dayKey(t.idx-k);dots+='<i class="'+(set[key]?'on':'')+(k===0?' today':'')+'" title="'+key+'"></i>'}
-      return '<div class="ci-row"><div class="ci-top"><b>'+esc(who)+'</b><span>'+(set[t.key]?'here today ✓':'not yet today')+'</span></div><div class="ci-dots" aria-label="Last 14 days">'+dots+'</div><div class="ci-top"><span>'+plural(st,'day')+' in a row</span><span>'+plural(total,'day')+' total</span></div></div>';
+      var set=ciSet(who),t=todayKeyFor(who),total=Object.keys(set).length,st=ciStreak(who),dots='',sum=0,cnt=0;
+      for(var k=13;k>=0;k--){
+        var key=dayKey(t.idx-k),c=set[key];
+        if(c&&c.mood){sum+=c.mood;cnt++}
+        dots+='<i class="'+(c?'on':'')+(k===0?' today':'')+'" title="'+key+(c&&c.mood?' · '+c.mood+'/10':'')+'"'+(c&&c.mood?' style="opacity:'+(0.4+c.mood*0.06).toFixed(2)+'"':'')+'></i>';
+      }
+      var today=set[t.key];
+      var status=today?(today.mood?today.mood+'/10 today':'here today ✓'):'not yet today';
+      var avg=cnt?' · avg '+(sum/cnt).toFixed(1)+'/10':'';
+      return '<div class="ci-row"><div class="ci-top"><b>'+esc(who)+'</b><span>'+status+'</span></div>'+
+        (today&&today.note?'<p class="ci-note">“'+esc(today.note)+'”</p>':'')+
+        '<div class="ci-dots" aria-label="Last 14 days">'+dots+'</div><div class="ci-top"><span>'+plural(st,'day')+' in a row</span><span>'+plural(total,'day')+avg+'</span></div></div>';
     }).join('')+'</div></div>';
 }
-function maybeCheckIn(){
-  if(!sb||!S.ciLoaded||S.ciBusy||CFG.names.indexOf(S.me)<0)return;
+function seenKey(){return 'vj_seen_'+S.me}
+function closePop(){var el=$('#pop');if(el){el.innerHTML='';delete el.dataset.id}}
+function showPop(id,html){var el=$('#pop');if(!el||el.dataset.id)return false;el.dataset.id=id;el.innerHTML='<div class="pop-back"><div class="pop" role="dialog">'+html+'</div></div>';return true}
+function saveCheckin(mood,text){
   var t=todayKeyFor(S.me),id=S.me+'-'+t.key;
-  if(S.ciFailed===id||S.checkins.some(function(c){return c.id===id}))return;
-  S.ciBusy=true;
-  Promise.resolve(sb.from('checkins').upsert({id:id,who:S.me,day:t.key,created_at:Date.now()})).then(function(r){
-    if(r&&r.error)S.ciFailed=id;
-  }).catch(function(){S.ciFailed=id}).then(function(){S.ciBusy=false;load('checkins')});
+  closePop();
+  guard(sb.from('checkins').upsert({id:id,who:S.me,day:t.key,created_at:Date.now(),mood:mood,mood_note:text||null}),'Could not save your check-in.','checkins').then(function(r){if(r===null)S.ciFailed=id});
+}
+function maybeCheckIn(){
+  if(!sb||!S.ciLoaded||CFG.names.indexOf(S.me)<0)return;
+  var t=todayKeyFor(S.me),id=S.me+'-'+t.key;
+  if(S.ciFailed===id||S.ciAsked===id||S.checkins.some(function(c){return c.id===id}))return;
+  var btns='';for(var i=1;i<=10;i++)btns+='<button type="button" data-act="mood-pick" data-v="'+i+'" aria-pressed="false">'+i+'</button>';
+  var ok=showPop('mood','<h2>How are you today? 🌸</h2><p class="muted" style="font-weight:700">1 is rough, 10 is wonderful</p><div class="mood" role="group" aria-label="Mood from 1 to 10">'+btns+'</div>'+
+    '<input id="mood-note" maxlength="120" placeholder="Anything you want to say? (optional)" aria-label="Optional note">'+
+    '<div class="btns"><button class="btn" data-act="mood-save">Check in 💗</button><button class="btn ghost" data-act="mood-skip">Skip</button></div>');
+  if(ok){S.ciAsked=id;S.mood=null}
+}
+function latestMoodOf(who){
+  var best=null;
+  S.checkins.forEach(function(c){if(c.who===who&&c.mood&&(!best||c.day>best.day))best=c});
+  return best;
+}
+function checkOtherMood(){
+  if(!S.ciLoaded||CFG.names.indexOf(S.me)<0)return;
+  var c=latestMoodOf(other());
+  if(!c||store.get('vj_seenci_'+S.me)===c.id)return;
+  var shown=showPop('ci-'+c.id,'<h2>'+esc(c.who)+' checked in 💗</h2><p class="label">'+esc(c.day)+'</p><div class="bigmood">'+c.mood+'<span style="font-size:24px">/10</span></div>'+
+    (c.note?'<div class="note"><p>'+esc(c.note)+'</p></div>':'')+
+    '<div class="btns"><button class="btn" data-act="cio-ok" data-id="'+esc(c.id)+'">Got it 💗</button><button class="btn ghost" data-act="cio-note" data-id="'+esc(c.id)+'">Send a note</button></div>');
+  if(shown)burst(['💗','🩷'],10);
+}
+function checkNewNote(){
+  if(!S.notesLoaded||CFG.names.indexOf(S.me)<0)return;
+  var n=latestNote(other());
+  if(!n||n.createdAt<=(+store.get(seenKey())||0))return;
+  var shown=showPop(n.id,'<h2>A note for you 💌</h2><p class="label">'+esc(n.from)+' · '+ago(n.createdAt)+'</p><div class="note"><p>'+esc(n.text)+'</p></div><div class="btns"><button class="btn" data-act="pop-ok" data-ts="'+n.createdAt+'">Got it 💗</button><button class="btn ghost" data-act="pop-reply" data-ts="'+n.createdAt+'">Reply</button></div>');
+  if(shown)burst(['💌','💗','🩷'],14);
 }
 function noteActs(n){
   return '<span class="acts"><button class="icon-btn" data-act="edit-note" data-id="'+esc(n.id)+'" aria-label="Edit note">✏️</button><button class="icon-btn" data-act="del" data-col="notes" data-id="'+esc(n.id)+'" aria-label="Delete note">🗑️</button></span>';
@@ -573,6 +625,8 @@ function render(){
   if($('.banner')&&!S.confettiDone.ms){S.confettiDone.ms=1;confetti()}
   if($('.here')&&!S.confettiDone.here){S.confettiDone.here=1;confetti()}
   maybeCheckIn();
+  checkOtherMood();
+  checkNewNote();
 }
 function tick(){
   if(!S.booted||!isUnlocked()||!S.me)return;
@@ -644,9 +698,16 @@ var actions={
     }else render();
   },
   who:function(el){S.me=el.dataset.v;store.set('vj_me',S.me);render()},
-  switch:function(){S.me=null;store.del('vj_me');render()},
+  switch:function(){closePop();S.me=null;store.del('vj_me');render()},
   theme:function(el){store.set('vj_theme',el.dataset.v);applyTheme();render()},
-  logout:function(){store.del('vj_pc');store.del('vj_me');S.me=null;S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
+  'mood-pick':function(el){S.mood=+el.dataset.v;$$('.mood button').forEach(function(b){b.setAttribute('aria-pressed',String(b===el))})},
+  'mood-save':function(){if(!S.mood){toast('Pick a number from 1 to 10.');return}var i=$('#mood-note');saveCheckin(S.mood,i?i.value.trim().slice(0,120):'')},
+  'mood-skip':function(){saveCheckin(null,'')},
+  'cio-ok':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();render()},
+  'cio-note':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();noteSheet()},
+  'pop-ok':function(el){store.set(seenKey(),el.dataset.ts);closePop()},
+  'pop-reply':function(el){store.set(seenKey(),el.dataset.ts);closePop();noteSheet()},
+  logout:function(){closePop();store.del('vj_pc');store.del('vj_me');S.me=null;S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
   motion:function(){
     if(reduced()){delete document.documentElement.dataset.motion;store.set('vj_motion','')}
     else{document.documentElement.dataset.motion='reduced';store.set('vj_motion','reduced')}
