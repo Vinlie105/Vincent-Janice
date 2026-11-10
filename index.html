@@ -323,7 +323,10 @@ function applyTheme(){
 }
 applyTheme();
 
-function codeFor(who){return (S.codes&&S.codes[who])||S.passcode||''}
+function codeFor(who){
+  if(who==='Guest')return (S.codes&&S.codes.Guest)||'';
+  return (S.codes&&S.codes[who])||S.passcode||'';
+}
 function isUnlocked(){var c=S.me?codeFor(S.me):'';return !!c&&store.get('vj_pc')===c}
 function myTz(){return CFG.tz[S.me]||'Asia/Singapore'}
 function other(){return S.me==='Vincent'?'Janice':'Vincent'}
@@ -709,7 +712,7 @@ function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="switch">Switch user</button><button class="btn small" data-act="logout">Log out</button></div></div>'+
     '<div class="card stack"><b>Your passcode</b><div class="field"><label for="newpc" class="muted">4 to 6 digits. Only you use this one.</label><input id="newpc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="savepc"'+(S.db?'':' disabled')+'>Save my passcode</button></div></div>'+
-    '<div class="card stack"><b>Guest code</b><div class="field"><label for="newgc" class="muted">What guests type to see memories and photos.</label><input id="newgc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="saveguest"'+(S.db?'':' disabled')+'>Save guest code</button></div></div>'+
+    '<div class="card stack"><b>Guest code</b><div class="field"><label for="newgc" class="muted">Guests need their own code to see memories and photos. Until you set one, guests cannot log in.</label><input id="newgc" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div><div><button class="btn small" data-act="saveguest"'+(S.db?'':' disabled')+'>Save guest code</button></div></div>'+
     '<div class="card stack"><b>Notifications</b>'+notifBlock()+'</div>'+
     '<div class="card stack"><b>Install the app</b>'+installBlock()+'</div>'+
     '<div class="card stack"><b>Theme</b><div class="seg" role="group" aria-label="Theme">'+[['light','Pink'],['dark','Night'],['auto','Match phone']].map(function(t){return '<button data-act="theme" data-v="'+t[0]+'" aria-pressed="'+(curTheme()===t[0])+'">'+t[1]+'</button>'}).join('')+'</div></div>'+
@@ -818,10 +821,11 @@ function gamesView(){
   return playMenu();
 }
 function gateView(){
-  var len=codeFor(S.pending).length||4,dots='';
+  var code=codeFor(S.pending),len=code.length||4,dots='';
   for(var i=0;i<len;i++)dots+='<i class="'+(i<S.entered.length?'on':'')+'"></i>';
   var keys='123456789'.split('').concat(['','0','⌫']).map(function(k){
     return k===''?'<span></span>':'<button data-act="key" data-v="'+k+'" aria-label="'+(k==='⌫'?'Delete':k)+'">'+k+'</button>'}).join('');
+  if(!code)return '<div class="gate"><h1>Hi, '+esc(S.pending)+' 💗</h1><p class="muted who-note">Guest access is off until a guest code is set. Ask Vincent or Janice to set one in Settings.</p><button class="btn ghost small" data-act="gate-back">Back</button></div>';
   return '<div class="gate"><h1>Hi, '+esc(S.pending)+' 💗</h1><p class="muted" style="font-weight:700">Your passcode, please</p><div class="dots" id="dots" aria-hidden="true">'+dots+'</div><div class="pad">'+keys+'</div><button class="btn ghost small" data-act="gate-back">Not you?</button></div>';
 }
 function whoView(){
