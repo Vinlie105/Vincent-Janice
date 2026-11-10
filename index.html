@@ -941,7 +941,7 @@ var actions={
       }else{S.entered='';render();var d=$('#dots');if(d){d.classList.add('shake');setTimeout(function(){d.classList.remove('shake')},400)}}
     }else render();
   },
-  'gate-back':function(){S.pending='';S.entered=''},
+  'gate-back':function(){S.pending='';S.entered='';render()},
   who:function(el){S.pending=el.dataset.v;S.entered='';render()},
   switch:function(){pushOff();closePop();S.me=null;S.pending='';S.entered='';store.del('vj_me');store.del('vj_pc');render()},
   theme:function(el){store.set('vj_theme',el.dataset.v);applyTheme();render()},
@@ -959,8 +959,8 @@ var actions={
     navigator.serviceWorker.ready.then(function(reg){return reg.showNotification('Test ping 💗',{body:'Notifications are working.',icon:'icons/icon-192.png',badge:'icons/icon-192.png'})}).catch(function(){toast('Could not show a test.')});
   },
   install:function(){if(installEvt){installEvt.prompt();installEvt=null;render()}},
-  'play-menu':function(){S.play='menu'},
-  'play-open':function(el){S.play=el.dataset.v},
+  'play-menu':function(){S.play='menu';render();window.scrollTo(0,0)},
+  'play-open':function(el){S.play=el.dataset.v;render();window.scrollTo(0,0)},
   goc4:function(){S.tab='games';S.play='c4';S.editList=false;render();window.scrollTo(0,0)},
   col:function(el){c4Move(+el.dataset.v)},
   'game-new':function(el){
