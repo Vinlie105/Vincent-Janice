@@ -262,6 +262,14 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 @keyframes pingpulse{0%{opacity:0;transform:scale(.6)}25%{opacity:1}100%{opacity:0;transform:scale(1.4)}}
 @keyframes heartbeat{0%{transform:scale(.3);opacity:0}20%{transform:scale(1.2);opacity:1}32%{transform:scale(.95)}46%{transform:scale(1.15)}60%{transform:scale(1)}100%{transform:translateY(-50px) scale(1);opacity:0}}
 @keyframes floatup{0%{transform:translate(-50%,0) scale(.5);opacity:0}15%{opacity:1}100%{transform:translate(calc(-50% + var(--sx,0px)),-170px) scale(1.2);opacity:0}}
+.intro{position:fixed;inset:0;z-index:100;overflow:hidden;background:radial-gradient(circle at 50% 45%,var(--bg) 0%,var(--card) 100%);animation:introOut .6s ease-in 2s forwards}
+.intro .fl{position:absolute;left:var(--x);top:var(--y);width:var(--s);height:var(--s);margin:calc(var(--s)/-2) 0 0 calc(var(--s)/-2);animation:bloom .9s cubic-bezier(.3,1.5,.5,1) var(--d) both}
+.intro .fl svg{width:100%;height:100%;display:block;animation:flsway 3s ease-in-out var(--d) both}
+.intro .hi{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--bg);color:var(--fg);border-radius:28px;padding:14px 26px;font-family:var(--display);font-weight:700;font-size:44px;line-height:1.05;text-align:center;box-shadow:0 10px 30px var(--shadow);max-width:86%;animation:hiIn .7s cubic-bezier(.3,1.4,.5,1) .55s both}
+@keyframes bloom{from{transform:scale(0) rotate(-120deg);opacity:0}to{transform:scale(1) rotate(var(--r));opacity:1}}
+@keyframes flsway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@keyframes hiIn{from{transform:translate(-50%,-30%) scale(.7);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+@keyframes introOut{to{opacity:0;transform:scale(1.08)}}
 :root[data-motion="reduced"] *{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (max-width:360px){.tile b{font-size:22px}.daynum{font-size:60px}.pad{grid-template-columns:repeat(3,64px)}}
@@ -346,7 +354,7 @@ var S={
   me:(['Vincent','Janice'].indexOf(store.get('vj_me'))>=0?store.get('vj_me'):null),
   tab:'home',editList:false,entered:'',
   rendered:'',confettiDone:{},dayAnimated:false,
-  pingSeen:0,lastView:'',enterAt:0,c4Seen:null,c4Fx:null,tickFx:null
+  introDone:false,introAt:0,pingSeen:0,lastView:'',enterAt:0,c4Seen:null,c4Fx:null,tickFx:null
 };
 if(store.get('vj_motion')==='reduced')document.documentElement.dataset.motion='reduced';
 function curTheme(){return store.get('vj_theme')||'light'}
@@ -430,6 +438,24 @@ function floatHearts(x,y){
   [['💗',0,-22],['🩷',.15,18],['💖',.3,-4]].forEach(function(h){
     fxAdd('floatup',h[0],2300,'--x:'+x+'px;--y:'+y+'px;--w:'+h[1]+'s;--sx:'+h[2]+'px');
   });
+}
+var FLOWER_COLORS=['#FF4F93','#D90F5C','#FF77AD','#E8326E','#FF9CC2','#C2185B','#FF5C8D'];
+var FLOWER_SVG='<svg viewBox="0 0 100 100" aria-hidden="true"><g fill="currentColor"><circle cx="50" cy="24" r="19"/><circle cx="75" cy="42" r="19"/><circle cx="66" cy="72" r="19"/><circle cx="34" cy="72" r="19"/><circle cx="25" cy="42" r="19"/></g><circle cx="50" cy="50" r="11" fill="#FFF0F6"/><circle cx="50" cy="50" r="5" fill="#FFB703"/></svg>';
+var INTRO_FADE_MS=2000,INTRO_TOTAL_MS=2700;
+function startIntro(){
+  if(motionOff()||$('.intro'))return;
+  var cols=5,rows=7,html='';
+  for(var r=0;r<rows;r++)for(var c=0;c<cols;c++){
+    var x=(c+.5)/cols*100+(Math.random()-.5)*14,y=(r+.5)/rows*100+(Math.random()-.5)*10,s=56+Math.random()*64;
+    html+='<span class="fl" style="--x:'+x.toFixed(1)+'%;--y:'+y.toFixed(1)+'%;--s:'+s.toFixed(0)+'px;--d:'+(Math.random()*1).toFixed(2)+'s;--r:'+Math.round(Math.random()*72)+'deg;color:'+FLOWER_COLORS[Math.floor(Math.random()*FLOWER_COLORS.length)]+'">'+FLOWER_SVG+'</span>';
+  }
+  html+='<div class="hi">Welcome, '+esc(S.me)+' 💗</div>';
+  var el=document.createElement('div');
+  el.className='intro';el.setAttribute('aria-hidden','true');el.innerHTML=html;
+  el.addEventListener('click',function(){el.remove();S.enterAt=Date.now();render()});
+  document.body.appendChild(el);
+  S.introAt=Date.now()+INTRO_FADE_MS;
+  setTimeout(function(){el.remove()},INTRO_TOTAL_MS);
 }
 function pingArrived(from){
   toast(from+' sent you a ping 💗');
@@ -909,8 +935,9 @@ function render(){
   if(S.me&&!isUnlocked()){S.pending=S.me;S.me=null;S.entered=''}
   if(!S.me){S.lastView='';app.classList.remove('enter');app.innerHTML=S.pending?gateView():whoView();return}
   app.innerHTML=appView();
+  if(!S.introDone){S.introDone=true;startIntro()}
   var viewKey=S.tab+'|'+S.play,nowMs=Date.now();
-  if(S.lastView!==viewKey){S.lastView=viewKey;S.enterAt=nowMs}
+  if(S.lastView!==viewKey){S.lastView=viewKey;S.enterAt=Math.max(nowMs,S.introAt)}
   var sinceEnter=nowMs-S.enterAt;
   if(!motionOff()&&sinceEnter<1200){app.classList.add('enter');app.style.setProperty('--el',(sinceEnter/1000)+'s')}
   else app.classList.remove('enter');
@@ -1016,7 +1043,7 @@ var actions={
   },
   'gate-back':function(){S.pending='';S.entered='';render()},
   who:function(el){S.pending=el.dataset.v;S.entered='';render()},
-  switch:function(){pushOff();closePop();S.me=null;S.pending='';S.entered='';store.del('vj_me');store.del('vj_pc');render()},
+  switch:function(){pushOff();closePop();S.introDone=false;S.me=null;S.pending='';S.entered='';store.del('vj_me');store.del('vj_pc');render()},
   theme:function(el){store.set('vj_theme',el.dataset.v);applyTheme();render()},
   ping:function(el){
     if(!sb)return;
@@ -1067,7 +1094,7 @@ var actions={
   'cio-note':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();noteSheet()},
   'pop-ok':function(el){store.set(seenKey(),el.dataset.ts);closePop()},
   'pop-reply':function(el){store.set(seenKey(),el.dataset.ts);closePop();noteSheet()},
-  logout:function(){pushOff();closePop();store.del('vj_pc');store.del('vj_me');S.me=null;S.pending='';S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
+  logout:function(){pushOff();closePop();S.introDone=false;store.del('vj_pc');store.del('vj_me');S.me=null;S.pending='';S.entered='';S.tab='home';S.editList=false;render();window.scrollTo(0,0)},
   motion:function(){
     if(reduced()){delete document.documentElement.dataset.motion;store.set('vj_motion','')}
     else{document.documentElement.dataset.motion='reduced';store.set('vj_motion','reduced')}
