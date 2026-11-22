@@ -1,8 +1,8 @@
 // sw.js: lets the site install as an app and open even with a weak connection.
 // Network first, so every open picks up the newest files. The cache is only a fallback.
-var CACHE = 'vj-shell-v3';
+var CACHE = 'vj-shell-v4';
 var SHELL = [
-  './', 'index.html', 'config.js', 'questions.js', 'games.js', 'manifest.webmanifest',
+  './', 'index.html', 'config.js', 'questions.js', 'games.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'
 ];
 
