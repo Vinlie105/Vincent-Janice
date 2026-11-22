@@ -262,7 +262,7 @@ function enterAs(user){
     S.uid=user.id;S.me=name;S.pending='';S.entered='';S.loginErr='';S.signing=false;
     startSession();checkPushState();markRead(true);render();
   }).catch(function(){
-    S.loginErr='Could not reach the server. Check your connection.';S.signing=false;S.entered='';render();
+    S.loginErr='We can’t reach the app right now. Check your connection and try again 🤍';S.signing=false;S.entered='';render();
   });
 }
 function signIn(name,pin){
@@ -271,12 +271,12 @@ function signIn(name,pin){
   Promise.resolve(sb.auth.signInWithPassword({email:emailFor(name),password:pin})).then(function(res){
     if(res&&res.error){
       S.signing=false;S.entered='';
-      S.loginErr=res.error.status===429?'Too many tries. Wait a few minutes and try again.':'That PIN is not right.';
+      S.loginErr=res.error.status===429?'That was a few tries. Take a little break and try again in a few minutes 🤍':'That PIN doesn’t match. Try again 🤍';
       render();var d=$('#dots');if(d){d.classList.add('shake');setTimeout(function(){d.classList.remove('shake')},400)}
       return;
     }
     return enterAs(res.data.user);
-  }).catch(function(){S.signing=false;S.entered='';S.loginErr='Could not reach the server. Check your connection.';render()});
+  }).catch(function(){S.signing=false;S.entered='';S.loginErr='We can’t reach the app right now. Check your connection and try again 🤍';render()});
 }
 function signOut(){
   var done=function(){stopSession();render();window.scrollTo(0,0)};
@@ -313,7 +313,7 @@ function dhmsTiles(target){
 function heroCard(){
   var ph=phase();
   if(ph==='before'){
-    return '<section class="hero" aria-label="Countdown to meeting">'+FLOWER+'<p class="label">3 Dec · 12:25 WIB · CGK</p><h2>Until Vincent lands in Jakarta</h2>'+dhmsTiles(CFG.arrive)+'<p class="sub">Flight 8B 152 leaves Singapore at 11:40.</p></section>';
+    return '<section class="hero" aria-label="Countdown to meeting">'+FLOWER+'<p class="label">3 Dec · 12:25 WIB · CGK</p><h2>Until Vincent meets Janice</h2>'+dhmsTiles(CFG.arrive)+'<p class="sub">Flight 8B 152 leaves Singapore at 11:40.</p></section>';
   }
   if(ph==='during'){
     var d=Math.min(CFG.tripDays,Math.floor((Date.now()-CFG.arrive)/86400000)+1);
@@ -506,6 +506,22 @@ function savePushSub(sub){
 /* third value 1 = on by default (you switch it off); otherwise off by default (you switch it on) */
 var PREF_OPTS=[['notes','New notes',1],['pings','Pings and game invites',1],['turn','Connect Four turns',1],['list','List and countdown changes'],['questions','New game questions'],['reminders','Countdown reminders']];
 function prefOn(o){var v=S.prefs[o[0]];return o[2]?v!==false:!!v}
+/* ---------- one-time onboarding (each guide shows once, then never again) ---------- */
+function isIos(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}
+function maybeOnboard(){
+  var pop=$('#pop');
+  if(!S.me||!S.booted||(pop&&pop.dataset.id)||$('.sheet-back')||$('.intro'))return;
+  if(!isInstalled()){
+    /* iPhone in Safari: explain how to install, once */
+    if(isIos()&&store.get('vj_onb_install')!=='1')
+      showPop('onb-install','<h2>Add us to your Home Screen 🤍</h2><p style="font-weight:700;font-size:18px">Tap <b>Share</b>, then <b>Add to Home Screen</b>. After that, open the app from your Home Screen.</p><div class="btns"><button class="btn" data-act="onb-install-ok">Got it 💗</button></div>');
+    return;
+  }
+  /* opened from the Home Screen: ask about notifications once, only if the phone has not been asked yet */
+  if(!pushSupport()||!AC.vapidPublicKey||S.pushOn||Notification.permission!=='default')return;
+  if(store.get('vj_onb_notif_'+S.me)==='1')return;
+  showPop('onb-notif','<h2>Stay close 🤍</h2><p style="font-weight:700;font-size:18px">Turn on notifications so you know when '+esc(other())+' leaves you something 🤍</p><div class="btns"><button class="btn" data-act="onb-notif-on">Turn on notifications</button><button class="btn ghost" data-act="onb-notif-later">Not now</button></div>');
+}
 var lastRead=0;
 /* You opened the app: clear the number on the icon and reset your unread count on the server. */
 function markRead(force){
@@ -568,7 +584,7 @@ function installBlock(){
 function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" data-act="logout">Log out</button></div></div>'+
-    '<div class="card stack"><b>Number on the app icon</b><p class="muted" style="font-weight:700">1. Add the app to your Home Screen (iPhone: Share, then Add to Home Screen). 2. Open it from the new icon. 3. Turn on notifications below and tap Allow. Then unread notes, pings and game turns show as a number on the icon, and it clears when you open the app.</p></div>'+
+    (isInstalled()&&S.pushOn?'':'<div class="card stack"><b>Number on the app icon</b><p class="muted" style="font-weight:700">1. Add the app to your Home Screen (iPhone: Share, then Add to Home Screen). 2. Open it from the new icon. 3. Turn on notifications below and tap Allow. Then unread notes, pings and game turns show as a number on the icon, and it clears when you open the app.</p></div>')+
     '<div class="card stack"><b>Notifications</b>'+notifBlock()+'</div>'+
     '<div class="card stack"><b>Install the app</b>'+installBlock()+'</div>'+
     '<div class="card stack"><b>Theme</b><div class="seg" role="group" aria-label="Theme">'+[['light','Pink'],['dark','Night'],['auto','Match phone']].map(function(t){return '<button data-act="theme" data-v="'+t[0]+'" aria-pressed="'+(curTheme()===t[0])+'">'+t[1]+'</button>'}).join('')+'</div></div>'+
@@ -739,11 +755,13 @@ function render(){
   maybeCheckIn();
   checkOtherMood();
   checkNewNote();
+  maybeOnboard();
   syncPush();
 }
 function tick(){
   if(!S.booted||!isUnlocked()||!S.me)return;
   if(renderKey()!==S.rendered){render();return}
+  maybeOnboard();
   var now=Date.now();
   $$('.tiles[data-target]').forEach(function(t){
     var p=parts(+t.dataset.target-now);
@@ -866,6 +884,9 @@ var actions={
   'mood-skip':function(){markCiDone();closePop()},
   'cio-ok':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();render()},
   'cio-note':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();noteSheet()},
+  'onb-install-ok':function(){store.set('vj_onb_install','1');closePop()},
+  'onb-notif-on':function(){store.set('vj_onb_notif_'+S.me,'1');closePop();enablePush()},
+  'onb-notif-later':function(){store.set('vj_onb_notif_'+S.me,'1');closePop();toast('You can turn them on any time in Settings 💗')},
   'pop-ok':function(el){store.set(seenKey(),el.dataset.ts);closePop()},
   'pop-reply':function(el){store.set(seenKey(),el.dataset.ts);closePop();noteSheet()},
   logout:function(){closePop();S.pending='';S.entered='';signOut()},
