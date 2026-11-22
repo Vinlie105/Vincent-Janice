@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://fpfeswlsyxqsslqpgbph.supabase.co wss://fpfeswlsyxqsslqpgbph.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://fpfeswlsyxqsslqpgbph.supabase.co wss://fpfeswlsyxqsslqpgbph.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Vincent & Janice</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -143,8 +143,8 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 /* tab bar */
 .tabs{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:2px solid var(--line);z-index:20;
   padding:6px max(16px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
-.tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
-.tabs button{background:transparent;border:0;border-radius:14px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:0;font-size:12px;font-weight:800;color:var(--muted)}
+.tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr);gap:2px}
+.tabs button{background:transparent;border:0;border-radius:14px;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:0;font-size:11px;font-weight:800;color:var(--muted);min-width:0;white-space:nowrap}
 .tabs button span{font-size:22px;line-height:1.2}
 .tabs button[aria-current="page"]{background:var(--card);color:var(--red)}
 
@@ -273,6 +273,41 @@ details summary{cursor:pointer;font-weight:800;padding:6px 0}
 @keyframes introOut{to{opacity:0;transform:scale(1.08)}}
 :root[data-motion="reduced"] *{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* Open When letters */
+.env-pink{--env:#FF9CC2;--env-dark:#E8326E;--env-light:#FFD6E6;--ink:#5B1038}
+.env-red{--env:#E8326E;--env-dark:#B40F4C;--env-light:#F4749F;--ink:#FFFFFF}
+.env-blue{--env:#BFDDFF;--env-dark:#7FB2EE;--env-light:#E3F0FF;--ink:#1F3A5F}
+.env-white{--env:#FFFFFF;--env-dark:#D7D7E4;--env-light:#F4F4F9;--ink:#1F3A5F}
+.shelf{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.env-wrap{position:relative;min-width:0}
+.env-wrap .acts{position:absolute;top:6px;right:6px;display:flex;gap:6px}
+.env-wrap .icon-btn{width:30px;height:30px;font-size:14px}
+.env{width:100%;border:0;border-radius:18px;padding:14px 10px 12px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;background:var(--env);color:var(--ink);box-shadow:0 6px 14px var(--shadow);transition:transform .15s}
+.env:active{transform:scale(.97)}
+.env.env-white{border:2px solid var(--line)}
+.env.locked{filter:saturate(.75)}
+.env-art{width:72px;display:block}
+.env-art svg,.rv-env svg{width:100%;height:auto;display:block;overflow:visible}
+.env-label{font-size:15px;line-height:1.2;overflow-wrap:anywhere}
+.env-sub{font-weight:700;opacity:.85}
+.env .e-body,.rv-env .e-body{fill:var(--env-light);stroke:var(--ink);stroke-width:2.5}
+.env .e-flap,.rv-env .e-flap{fill:var(--env-dark);stroke:var(--ink);stroke-width:2.5}
+.env .e-paper,.rv-env .e-paper{fill:#fff;stroke:var(--ink);stroke-width:2}
+.env .e-line,.rv-env .e-line{stroke:var(--ink)}
+.reveal{display:flex;flex-direction:column;align-items:center;width:100%}
+.rv-env{width:120px;display:block;position:relative;z-index:1}
+.paper{background:var(--surface);color:var(--fg);border-radius:18px;padding:14px;width:100%;margin-top:-10px;box-shadow:0 8px 22px var(--shadow);text-align:left}
+.paper h2{margin:2px 0 8px}
+.paper .note{max-height:42vh;overflow:auto;background:transparent;padding:0}
+.reveal.anim .rv-env .e-flap{transform-box:fill-box;transform-origin:50% 100%;animation:flapOpen .5s ease both}
+.reveal.anim .paper{animation:paperIn .6s .45s cubic-bezier(.2,.8,.2,1) both}
+@keyframes flapOpen{from{transform:scaleY(-1)}to{transform:scaleY(1)}}
+@keyframes paperIn{from{opacity:0;transform:translateY(-44px) scale(.9)}to{opacity:1;transform:none}}
+.swatches{display:flex;gap:12px;align-items:center}
+.sw{width:38px;height:38px;border-radius:50%;border:3px solid var(--line);padding:0}
+.sw[aria-pressed="true"]{border-color:var(--fg);box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--fg)}
+.sw-pink{background:#FF9CC2}.sw-red{background:#E8326E}.sw-blue{background:#BFDDFF}.sw-white{background:#FFFFFF}
+@media (max-width:360px){.tabs button{font-size:10px}.shelf{gap:8px}}
 @media (max-width:360px){.tile b{font-size:22px}.daynum{font-size:60px}.pad{grid-template-columns:repeat(3,64px)}}
 </style>
 </head>

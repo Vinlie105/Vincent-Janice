@@ -61,7 +61,7 @@ function motionOff(){return reduced()||!!(window.matchMedia&&matchMedia('(prefer
 /* ---------- state ---------- */
 var S={
   db:null,dbState:'loading',booted:false,
-  countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',cq:[],pushOn:false,pushWho:'',pingAt:0,prefs:(function(){try{return JSON.parse(store.get('vj_prefs')||'{}')||{}}catch(e){return {}}})(),notesLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
+  countdowns:[],plans:[],notes:[],game:null,gameFx:0,play:'menu',cq:[],pushOn:false,pushWho:'',pingAt:0,prefs:(function(){try{return JSON.parse(store.get('vj_prefs')||'{}')||{}}catch(e){return {}}})(),notesLoaded:false,letters:[],lettersLoaded:false,checkins:[],ciLoaded:false,ciBusy:false,ciFailed:'',ciAsked:'',mood:null,
   pending:'',authChecked:false,signing:false,loginErr:'',uid:null,sessionOn:false,
   me:null,
   tab:'home',editList:false,entered:'',
@@ -205,8 +205,19 @@ var MAP={
   notes:function(r){return {id:r.id,text:r.body,from:r.from_name,createdAt:r.created_at,userId:r.user_id,deleted:!!r.deleted_at}},
   custom_questions:function(r){return {id:r.id,mode:r.mode,cat:r.cat,q:r.q,at:r.created_at||0}},
   game:function(r){return {id:r.id,board:r.board,turn:r.turn,winner:r.winner,starter:r.starter,vw:r.vincent_wins||0,jw:r.janice_wins||0,draws:r.draws||0,upd:r.updated_at||0}},
-  checkins:function(r){return {id:r.id,who:r.who,day:r.day,mood:r.mood,note:r.mood_note,at:r.created_at}}
+  checkins:function(r){return {id:r.id,who:r.who,day:r.day,mood:r.mood,note:r.mood_note,at:r.created_at}},
+  /* an Open When envelope: label, type, colour and dates only. The letter text never comes with the list. */
+  letters:function(r){return {id:r.id,mine:!!r.is_mine,from:r.is_mine?S.me:other(),type:r.type,label:r.label,colour:r.envelope_colour,
+    unlock:r.unlock_at?Date.parse(r.unlock_at):null,openedAt:r.opened_at?Date.parse(r.opened_at):null,createdAt:Date.parse(r.created_at)}}
 };
+function loadLetters(){
+  if(!sb||!S.sessionOn)return Promise.resolve();
+  return Promise.resolve(sb.from('letters').select('*').order('created_at',{ascending:false})).then(function(res){
+    if(res.error)throw res.error;
+    S.letters=(res.data||[]).map(MAP.letters);S.lettersLoaded=true;
+    if(S.tab==='letters')render();
+  }).catch(function(){S.lettersLoaded=true});
+}
 function applyRows(table,rows){
   if(table==='countdowns')S.countdowns=rows.map(MAP.countdowns).filter(function(c){return !isNaN(c.ts)});
   if(table==='plans')S.plans=rows.map(MAP.plans).sort(function(a,b){return (a.order||0)-(b.order||0)});
@@ -236,11 +247,12 @@ function startSession(){
   S.sessionOn=true;S.dbState='loading';S.booted=false;
   var slow=setTimeout(function(){if(S.dbState==='loading'){S.dbState='slow';render()}},10000);
   Promise.all(TABLES.map(load)).then(function(){clearTimeout(slow)});
+  loadLetters();
   TABLES.forEach(function(t){
     sb.channel('rt-'+t).on('postgres_changes',{event:'*',schema:'public',table:t},function(){load(t)}).subscribe();
   });
   sb.channel('rt-pings').on('postgres_changes',{event:'INSERT',schema:'public',table:'pings'},function(){checkPings()}).subscribe();
-  sessionTimers.push(setInterval(function(){if(!document.hidden&&S.sessionOn)TABLES.forEach(load)},30000));
+  sessionTimers.push(setInterval(function(){if(!document.hidden&&S.sessionOn){TABLES.forEach(load);loadLetters()}},30000));
   sessionTimers.push(setInterval(checkPings,10000));
 }
 function stopSession(){
@@ -248,7 +260,7 @@ function stopSession(){
   sessionTimers.forEach(clearInterval);sessionTimers=[];
   try{if(sb)sb.removeAllChannels()}catch(e){}
   S.uid=null;S.me=null;S.booted=false;S.dbState='loading';
-  S.countdowns=[];S.plans=[];S.notes=[];S.checkins=[];S.cq=[];S.game=null;S.notesLoaded=false;S.ciLoaded=false;
+  S.countdowns=[];S.plans=[];S.notes=[];S.letters=[];S.lettersLoaded=false;S.checkins=[];S.cq=[];S.game=null;S.notesLoaded=false;S.ciLoaded=false;
   S.pushOn=false;S.pushWho='';S.pingSeen=0;S.introDone=false;S.tab='home';S.editList=false;
 }
 /* Who is this account? Ask the profiles table (only the two allowed people have a row). */
@@ -291,7 +303,7 @@ function connect(){
   sb.auth.onAuthStateChange(function(ev){
     if(ev==='SIGNED_OUT')setTimeout(function(){if(S.me||S.sessionOn){stopSession();render()}},0);
   });
-  document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.sessionOn){TABLES.forEach(load);checkPings();markRead()}});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.sessionOn){TABLES.forEach(load);loadLetters();checkPings();markRead()}});
   window.addEventListener('focus',function(){if(S.sessionOn)markRead()});
   if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',function(e){if(e.data&&e.data.type==='vj-read'&&S.sessionOn)markRead(true)});
   Promise.resolve(sb.auth.getSession()).then(function(r){
@@ -505,6 +517,7 @@ function savePushSub(sub){
 }
 /* third value 1 = on by default (you switch it off); otherwise off by default (you switch it on) */
 var PREF_OPTS=[['notes','New notes',1],['pings','Pings and game invites',1],['turn','Connect Four turns',1],['list','List and countdown changes'],['questions','New game questions'],['reminders','Countdown reminders']];
+PREF_OPTS.splice(3,0,['letters','Open When letters',1]);
 function prefOn(o){var v=S.prefs[o[0]];return o[2]?v!==false:!!v}
 /* ---------- one-time onboarding (each guide shows once, then never again) ---------- */
 function isIos(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}
@@ -591,9 +604,78 @@ function settingsView(){
     '<div class="card"><div class="seg"><button data-act="motion" aria-pressed="'+reduced()+'">Reduced motion: '+(reduced()?'on':'off')+'</button></div></div>'+
     '<p class="muted" style="font-size:13px;text-align:center">Signed in on this phone. Only the two of you can open this app.</p>';
 }
+/* ---------- Open When letters ---------- */
+var LETTER_COLOURS=['pink','red','blue','white'];
+var ENV_CLOSED='<svg viewBox="0 0 64 48" aria-hidden="true"><rect class="e-body" x="2" y="6" width="60" height="40" rx="6"/><path class="e-flap" d="M2 10 L32 31 L62 10 Z" stroke-linejoin="round"/></svg>';
+var ENV_OPEN='<svg viewBox="0 0 64 52" aria-hidden="true"><path class="e-flap" d="M2 20 L32 2 L62 20 Z" stroke-linejoin="round"/><rect class="e-paper" x="10" y="10" width="44" height="26" rx="3"/><rect class="e-body" x="2" y="20" width="60" height="30" rx="6"/><path class="e-line" d="M2 24 L32 42 L62 24" fill="none" stroke-width="2.5" stroke-linejoin="round"/></svg>';
+var MOMENT_LABELS=['Open when you miss me','Open when you can’t sleep','Open when you’re sad','Open when you need a laugh','Open when you’re stressed','Open when you feel lost','Open when you need a hug'];
+var ltSugg=[];
+function fmtDay(ms){return new Date(ms).toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:myTz()})}
+function fmtFull(ms){return new Date(ms).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:myTz()})}
+function safeColour(c){return LETTER_COLOURS.indexOf(c)>=0?c:'pink'}
+function envelopeCard(l){
+  var locked=l.type==='date'&&!l.openedAt&&l.unlock>Date.now(),sub;
+  if(l.mine)sub=l.openedAt?'opened':'not opened yet';
+  else if(l.openedAt)sub='opened '+esc(fmtDay(l.openedAt));
+  else if(locked)sub='🔒 Opens in <span data-rel="'+l.unlock+'">'+rel(l.unlock)+'</span>';
+  else sub=l.type==='moment'?'Tap to open':'Ready to open 💌';
+  var acts=(l.mine&&!l.openedAt)?'<span class="acts"><button class="icon-btn" data-act="letter-edit" data-id="'+esc(l.id)+'" aria-label="Edit letter">✏️</button><button class="icon-btn" data-act="del" data-col="letters" data-id="'+esc(l.id)+'" aria-label="Delete letter">🗑️</button></span>':'';
+  return '<div class="env-wrap"><button class="env env-'+safeColour(l.colour)+(locked?' locked':'')+'" data-act="letter-tap" data-id="'+esc(l.id)+'" aria-label="'+esc(l.label)+'"><span class="env-art">'+(l.openedAt?ENV_OPEN:ENV_CLOSED)+'</span><b class="env-label">'+esc(l.label)+'</b><small class="env-sub">'+sub+'</small></button>'+acts+'</div>';
+}
+function lettersView(){
+  var forMe=S.letters.filter(function(l){return !l.mine}),fromMe=S.letters.filter(function(l){return l.mine});
+  var shelf=function(list,empty){return list.length?'<div class="shelf">'+list.map(envelopeCard).join('')+'</div>':'<p class="empty">'+(S.lettersLoaded?empty:'Opening…')+'</p>'};
+  return syncBanner()+'<div class="sec-title"><h2 class="hand" style="font-size:38px">Open When 💌</h2><button class="btn" data-act="letter-new"'+(S.db?'':' disabled')+'>+ Write a letter</button></div>'+
+    '<div class="card"><div class="sec-title"><h2>For you</h2></div>'+shelf(forMe,'Nothing here yet. When '+esc(other())+' writes you one, it waits here, sealed.')+'</div>'+
+    '<div class="card"><div class="sec-title"><h2>From you</h2></div>'+shelf(fromMe,'Write '+esc(other())+' a letter for the day they need it 🤍')+'</div>';
+}
+function letterHtml(l,d,animate){
+  var who=l.mine?'You wrote this for '+esc(other()):esc(l.from)+' wrote this for you';
+  return '<div class="reveal env-'+safeColour(l.colour)+(animate?' anim':'')+'"><span class="rv-env">'+ENV_OPEN+'</span><div class="paper"><p class="label">'+who+'</p><h2>'+esc(d.label)+'</h2><div class="note"><p>'+esc(d.body)+'</p></div></div></div>'+
+    '<div class="btns"><button class="btn" data-act="letter-close">Close 💗</button></div>';
+}
+function readLetter(l,fn,args){
+  Promise.resolve(sb.rpc(fn,args)).then(function(r){
+    closePop();
+    if(r.error||!r.data){toast(fn==='open_letter'?'That one is not ready to open yet.':'Could not open that letter.');loadLetters();return}
+    var first=!l.mine&&!l.openedAt;
+    showPop('letter',letterHtml(l,r.data,first));
+    if(first)burst(['💌','💗','🩷'],14);
+    loadLetters();
+  }).catch(function(){closePop();toast('Could not open that letter.')});
+}
+function letterSuggestions(type){
+  if(type==='moment')return MOMENT_LABELS.map(function(t){return {label:t}});
+  var a=ymd(CFG.arrive,'Asia/Jakarta'),nb=nextBirthday(other()),by=nb.diff===0?nb.year+1:nb.year;
+  return [
+    {label:'Open on 3 Dec (the day we meet)',date:a[0]+'-'+pad2(a[1])+'-'+pad2(a[2])},
+    {label:'Open on your birthday',date:by+'-'+pad2(nb.month)+'-'+pad2(nb.day)},
+    {label:'Open on our Day 100',date:dayKey(startIdx()+99)}
+  ];
+}
+function renderLetterChips(w){
+  ltSugg=letterSuggestions(w.dataset.type);
+  $('#lt-chips',w).innerHTML=ltSugg.map(function(s,i){return '<button type="button" data-act="lt-suggest" data-i="'+i+'">'+esc(s.label)+'</button>'}).join('');
+}
+function letterSheet(ex){
+  var edit=!!ex,type=edit?ex.type:'moment',colour=safeColour(edit?ex.colour:'pink'),dt='',tm='',tz=CFG.tz[other()];
+  if(edit&&ex.unlock){var ms=Date.parse(ex.unlock),p=ymd(ms,tz);dt=p[0]+'-'+pad2(p[1])+'-'+pad2(p[2]);tm=clock(ms,tz)}
+  var body=edit?ex.body:'';
+  var w=openSheet('<h2>'+(edit?'Edit letter':'A letter for '+esc(other()))+'</h2>'+
+    '<div class="seg" role="group" aria-label="Type"><button type="button" data-act="lt-type" data-v="moment" aria-pressed="'+(type==='moment')+'"'+(edit?' disabled':'')+'>Open when…</button><button type="button" data-act="lt-type" data-v="date" aria-pressed="'+(type==='date')+'"'+(edit?' disabled':'')+'>Open on a date</button></div>'+
+    '<div class="field"><label for="f-label" class="muted">On the envelope (up to 60 characters)</label><input id="f-label" maxlength="60" value="'+esc(edit?ex.label:'')+'"></div>'+
+    '<div class="chips" id="lt-chips"></div>'+
+    '<div id="lt-when"'+(type==='date'?'':' hidden')+'><div class="two"><div class="field"><label for="f-date">Opens on</label><input id="f-date" type="date" value="'+esc(dt)+'"></div><div class="field"><label for="f-time">Time (optional)</label><input id="f-time" type="time" value="'+esc(tm)+'"></div></div><p class="muted" style="font-size:13px">In '+esc(other())+'’s time ('+(other()==='Janice'?'Jakarta':'Singapore')+'). It stays sealed until then.</p></div>'+
+    '<div class="swatches" id="lt-colours" role="group" aria-label="Envelope colour">'+LETTER_COLOURS.map(function(c){return '<button type="button" class="sw sw-'+c+'" data-act="lt-colour" data-v="'+c+'" aria-pressed="'+(c===colour)+'" aria-label="'+c+' envelope"></button>'}).join('')+'</div>'+
+    '<div class="field"><label for="f-body" class="muted">Your letter (up to 2000 characters)</label><textarea id="f-body" maxlength="2000" style="min-height:160px">'+esc(body)+'</textarea><span class="muted" id="cnt" style="text-align:right">'+body.length+' / 2000</span></div>'+
+    '<div class="btns"><button class="btn ghost" data-act="close">Cancel</button><button class="btn" data-act="lt-save" data-id="'+(edit?esc(ex.id):'')+'">'+(edit?'Save':'Seal it 💌')+'</button></div>');
+  w.dataset.type=type;w.dataset.colour=colour;
+  renderLetterChips(w);
+  $('#f-body',w).addEventListener('input',function(e){$('#cnt',w).textContent=e.target.value.length+' / 2000'});
+}
 function appView(){
-  var body={home:homeView,countdowns:countdownsView,list:listView,games:gamesView,settings:settingsView}[S.tab]();
-  var tabs=[['home','🏠','Home'],['countdowns','⏳','Countdowns'],['list','📝','Our list'],['games','🎲','Games'],['settings','⚙️','Settings']];
+  var body={home:homeView,countdowns:countdownsView,list:listView,letters:lettersView,games:gamesView,settings:settingsView}[S.tab]();
+  var tabs=[['home','🏠','Home'],['countdowns','⏳','Countdowns'],['list','📝','Our list'],['letters','💌','Open When'],['games','🎲','Games'],['settings','⚙️','Settings']];
   return (S.tab==='home'?'<header class="top"><h1>Vincent <span class="amp">&amp;</span> Janice</h1><div class="top-end">'+CAT+'<button class="btn ghost small" data-act="logout">Log out</button></div></header>':'')+body+
     '<nav class="tabs" aria-label="Sections"><div>'+tabs.map(function(t){
       return '<button data-act="tab" data-v="'+t[0]+'"'+(S.tab===t[0]?' aria-current="page"':'')+'><span aria-hidden="true">'+t[1]+'</span>'+t[2]+'</button>'}).join('')+'</div></nav>';
@@ -720,7 +802,8 @@ function hereOverlay(){
 
 /* ---------- render ---------- */
 function renderKey(){
-  return [S.booted,isUnlocked(),S.me,phase(),dayNumber(),pastCountdowns().length,upcoming().length].join('|');
+  var now=Date.now(),unlockedNow=S.letters.filter(function(l){return l.type==='date'&&!l.openedAt&&l.unlock&&l.unlock<=now}).length;
+  return [S.booted,isUnlocked(),S.me,phase(),dayNumber(),pastCountdowns().length,upcoming().length,unlockedNow].join('|');
 }
 function render(){
   var app=$('#app');
@@ -824,7 +907,7 @@ function savePlanOrder(a,b){
 function getById(list,id){return list.filter(function(x){return x.id===id})[0]}
 var confirmTimers={};
 var actions={
-  tab:function(el){S.tab=el.dataset.v;S.editList=false;render();window.scrollTo(0,0)},
+  tab:function(el){S.tab=el.dataset.v;S.editList=false;render();window.scrollTo(0,0);if(S.tab==='letters')loadLetters()},
   hearts:function(el){var r=el.getBoundingClientRect();burst(['💖','🩷','❤️','💗'],10,r.left+60,r.top+30)},
   key:function(el){
     var k=el.dataset.v;
@@ -887,6 +970,58 @@ var actions={
   'onb-install-ok':function(){store.set('vj_onb_install','1');closePop()},
   'onb-notif-on':function(){store.set('vj_onb_notif_'+S.me,'1');closePop();enablePush()},
   'onb-notif-later':function(){store.set('vj_onb_notif_'+S.me,'1');closePop();toast('You can turn them on any time in Settings 💗')},
+  'letter-new':function(){letterSheet(null)},
+  'letter-edit':function(el){
+    Promise.resolve(sb.rpc('read_own_letter',{p_id:el.dataset.id})).then(function(r){
+      if(r.error||!r.data){toast('Could not open that letter.');return}
+      letterSheet({id:el.dataset.id,label:r.data.label,body:r.data.body,type:r.data.type,unlock:r.data.unlock_at,colour:r.data.envelope_colour});
+    }).catch(function(){toast('Could not open that letter.')});
+  },
+  'letter-tap':function(el){
+    var l=getById(S.letters,el.dataset.id);if(!l||!sb)return;
+    if(l.mine){readLetter(l,'read_own_letter',{p_id:l.id});return}
+    if(l.openedAt){readLetter(l,'open_letter',{p_id:l.id,p_confirmed:true});return}
+    if(l.type==='date'&&l.unlock>Date.now()){
+      showPop('letter-lock','<h2>Not yet 🤍</h2><p style="font-weight:700;font-size:18px">This one opens on '+esc(fmtFull(l.unlock))+'.</p><div class="btns"><button class="btn" data-act="letter-close">Okay</button></div>');return;
+    }
+    if(l.type==='moment'){
+      showPop('letter-confirm','<h2>Are you sure?</h2><p style="font-weight:700;font-size:18px">Only open it when you really need it 🤍</p><div class="btns"><button class="btn" data-act="letter-open" data-id="'+esc(l.id)+'">Open it</button><button class="btn ghost" data-act="letter-close">Not yet</button></div>');return;
+    }
+    readLetter(l,'open_letter',{p_id:l.id,p_confirmed:false});
+  },
+  'letter-open':function(el){var l=getById(S.letters,el.dataset.id);if(l)readLetter(l,'open_letter',{p_id:l.id,p_confirmed:true})},
+  'letter-close':function(){closePop();loadLetters()},
+  'lt-type':function(el){
+    var w=$('.sheet-back');if(!w)return;
+    w.dataset.type=el.dataset.v;
+    $$('[data-act="lt-type"]',w).forEach(function(b){b.setAttribute('aria-pressed',String(b===el))});
+    $('#lt-when',w).hidden=el.dataset.v!=='date';
+    renderLetterChips(w);
+  },
+  'lt-colour':function(el){
+    var w=$('.sheet-back');if(!w)return;
+    w.dataset.colour=el.dataset.v;
+    $$('[data-act="lt-colour"]',w).forEach(function(b){b.setAttribute('aria-pressed',String(b===el))});
+  },
+  'lt-suggest':function(el){
+    var s=ltSugg[+el.dataset.i],w=$('.sheet-back');if(!s||!w)return;
+    $('#f-label',w).value=s.label;
+    if(s.date)$('#f-date',w).value=s.date;
+  },
+  'lt-save':function(el){
+    var w=$('.sheet-back'),label=$('#f-label').value.trim(),text=$('#f-body').value.trim(),type=w.dataset.type,colour=safeColour(w.dataset.colour),unlock=null;
+    if(!label){toast('Give the envelope a label.');return}
+    if(!text){toast('Write your letter first.');return}
+    if(type==='date'){
+      var d=$('#f-date').value,t=$('#f-time').value||'00:00',off=other()==='Janice'?CFG.tzOff.JKT:CFG.tzOff.SG;
+      if(!d){toast('Pick the day it opens.');return}
+      unlock=d+'T'+t+':00'+off;
+      if(isNaN(Date.parse(unlock))||Date.parse(unlock)<=Date.now()){toast('Pick a day in the future.');return}
+    }
+    var id=el.dataset.id;
+    var q=id?sb.rpc('update_letter',{p_id:id,p_label:label,p_body:text,p_colour:colour,p_unlock_at:unlock}):sb.rpc('create_letter',{p_label:label,p_body:text,p_type:type,p_unlock_at:unlock,p_colour:colour});
+    guard(q,'Could not save the letter.').then(function(ok){if(ok){closeSheet();toast(id?'Letter updated':'Letter sealed 💌');loadLetters()}});
+  },
   'pop-ok':function(el){store.set(seenKey(),el.dataset.ts);closePop()},
   'pop-reply':function(el){store.set(seenKey(),el.dataset.ts);closePop();noteSheet()},
   logout:function(){closePop();S.pending='';S.entered='';signOut()},
@@ -944,6 +1079,11 @@ var actions={
     }
     clearTimeout(confirmTimers[key]);
     /* notes are never really deleted: they are hidden, so nothing is lost by accident */
+    if(el.dataset.col==='letters'){
+      /* soft delete: the letter is hidden, never removed */
+      guard(sb.rpc('delete_letter',{p_id:el.dataset.id}),'Could not delete the letter.').then(function(ok){if(ok)loadLetters()});
+      return;
+    }
     if(el.dataset.col==='notes'){
       guard(sb.from('notes').update({deleted_at:Date.now()}).eq('id',el.dataset.id).eq('user_id',S.uid),'Could not delete the note.','notes');
       return;
