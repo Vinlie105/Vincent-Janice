@@ -260,7 +260,7 @@ function enterAs(user){
       return Promise.resolve(sb.auth.signOut()).then(function(){stopSession();render()});
     }
     S.uid=user.id;S.me=name;S.pending='';S.entered='';S.loginErr='';S.signing=false;
-    startSession();checkPushState();render();
+    startSession();checkPushState();markRead(true);render();
   }).catch(function(){
     S.loginErr='Could not reach the server. Check your connection.';S.signing=false;S.entered='';render();
   });
@@ -291,7 +291,9 @@ function connect(){
   sb.auth.onAuthStateChange(function(ev){
     if(ev==='SIGNED_OUT')setTimeout(function(){if(S.me||S.sessionOn){stopSession();render()}},0);
   });
-  document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.sessionOn){TABLES.forEach(load);checkPings()}});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.sessionOn){TABLES.forEach(load);checkPings();markRead()}});
+  window.addEventListener('focus',function(){if(S.sessionOn)markRead()});
+  if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',function(e){if(e.data&&e.data.type==='vj-read'&&S.sessionOn)markRead(true)});
   Promise.resolve(sb.auth.getSession()).then(function(r){
     var s=r&&r.data&&r.data.session;
     if(s&&s.user)return enterAs(s.user);
@@ -501,7 +503,19 @@ function savePushSub(sub){
     return res;
   });
 }
-var PREF_OPTS=[['checkins','Mood shares'],['games','Connect Four moves'],['list','List and countdown changes'],['questions','New game questions'],['reminders','Countdown reminders']];
+/* third value 1 = on by default (you switch it off); otherwise off by default (you switch it on) */
+var PREF_OPTS=[['notes','New notes',1],['pings','Pings and game invites',1],['turn','Connect Four turns',1],['list','List and countdown changes'],['questions','New game questions'],['reminders','Countdown reminders']];
+function prefOn(o){var v=S.prefs[o[0]];return o[2]?v!==false:!!v}
+var lastRead=0;
+/* You opened the app: clear the number on the icon and reset your unread count on the server. */
+function markRead(force){
+  try{if(navigator.clearAppBadge)Promise.resolve(navigator.clearAppBadge()).catch(function(){})}catch(e){}
+  if(!sb||!S.uid)return;
+  var now=Date.now();
+  if(!force&&now-lastRead<3000)return;
+  lastRead=now;
+  Promise.resolve(sb.rpc('mark_read')).catch(function(){});
+}
 function enablePush(){
   if(!sb||!AC.vapidPublicKey||CFG.names.indexOf(S.me)<0){toast('Log in as Vincent or Janice first.');return}
   Notification.requestPermission().then(function(perm){
@@ -540,8 +554,8 @@ function notifBlock(){
   if(!AC.vapidPublicKey)return '<p class="muted" style="font-weight:700">Notifications are not set up yet.</p>';
   if(!pushSupport())return '<p class="muted" style="font-weight:700">On iPhone: add the app to your Home Screen first (Share, then Add to Home Screen), then open it from there.</p>';
   if(Notification.permission==='denied')return '<p class="muted" style="font-weight:700">Notifications are blocked. Turn them on in your phone Settings, Notifications, V&amp;J.</p>';
-  if(S.pushOn)return '<p class="muted" style="font-weight:700">On ✓ Always on: notes, Ping 💗, game invites, birthdays, milestones and trip days.</p>'+
-    '<p class="label">Optional pings</p><div class="chips">'+PREF_OPTS.map(function(o){return '<button type="button" data-act="pref" data-v="'+o[0]+'" aria-pressed="'+(!!S.prefs[o[0]])+'">'+o[1]+'</button>'}).join('')+'</div>'+
+  if(S.pushOn)return '<p class="muted" style="font-weight:700">On ✓ Birthdays, milestones and trip days always come through. Choose the rest:</p>'+
+    '<p class="label">Notify me about</p><div class="chips">'+PREF_OPTS.map(function(o){return '<button type="button" data-act="pref" data-v="'+o[0]+'" aria-pressed="'+prefOn(o)+'">'+o[1]+'</button>'}).join('')+'</div>'+
     '<div><button class="btn ghost small" data-act="push-test">Send a test</button></div>';
   return '<p class="muted" style="font-weight:700">Get a ping on this phone for notes, Ping 💗, game invites, birthdays and milestones. You can add more later.</p><div><button class="btn small" data-act="push-on">Turn on notifications</button></div>';
 }
@@ -554,6 +568,7 @@ function installBlock(){
 function settingsView(){
   return '<h2 class="hand" style="font-size:38px">Settings</h2>'+
     '<div class="card stack"><p>You are <b>'+esc(S.me)+'</b> · '+(S.me==='Vincent'?'Singapore':'Jakarta')+' time.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" data-act="logout">Log out</button></div></div>'+
+    '<div class="card stack"><b>Number on the app icon</b><p class="muted" style="font-weight:700">1. Add the app to your Home Screen (iPhone: Share, then Add to Home Screen). 2. Open it from the new icon. 3. Turn on notifications below and tap Allow. Then unread notes, pings and game turns show as a number on the icon, and it clears when you open the app.</p></div>'+
     '<div class="card stack"><b>Notifications</b>'+notifBlock()+'</div>'+
     '<div class="card stack"><b>Install the app</b>'+installBlock()+'</div>'+
     '<div class="card stack"><b>Theme</b><div class="seg" role="group" aria-label="Theme">'+[['light','Pink'],['dark','Night'],['auto','Match phone']].map(function(t){return '<button data-act="theme" data-v="'+t[0]+'" aria-pressed="'+(curTheme()===t[0])+'">'+t[1]+'</button>'}).join('')+'</div></div>'+
@@ -814,8 +829,8 @@ var actions={
     });
   },
   pref:function(el){
-    var k=el.dataset.v;
-    S.prefs[k]=!S.prefs[k];
+    var k=el.dataset.v,isCore=PREF_OPTS.some(function(o){return o[0]===k&&o[2]});
+    S.prefs[k]=isCore?(S.prefs[k]===false):!S.prefs[k];
     store.set('vj_prefs',JSON.stringify(S.prefs));
     if(sb&&S.pushOn)navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription()}).then(function(sub){if(sub)return savePushSub(sub)}).catch(function(){});
     render();
