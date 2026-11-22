@@ -1,0 +1,3 @@
+# Banner message for the next update.
+# Put ONE short line below (up to 100 characters) and upload this file together with the changed files.
+# Leave it as it is, or delete the line, to show the normal "A new version is ready" message.

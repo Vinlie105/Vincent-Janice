@@ -262,6 +262,7 @@ function stopSession(){
   S.uid=null;S.me=null;S.booted=false;S.dbState='loading';
   S.countdowns=[];S.plans=[];S.notes=[];S.letters=[];S.lettersLoaded=false;S.checkins=[];S.cq=[];S.game=null;S.notesLoaded=false;S.ciLoaded=false;
   S.pushOn=false;S.pushWho='';S.pingSeen=0;S.introDone=false;S.tab='home';S.editList=false;
+  var upd=document.getElementById('upd');if(upd)upd.remove();
 }
 /* Who is this account? Ask the profiles table (only the two allowed people have a row). */
 function enterAs(user){
@@ -841,8 +842,61 @@ function render(){
   maybeOnboard();
   syncPush();
 }
+/* ---------- quiet "new version is ready" banner ----------
+   Every few minutes (only while the app is on screen) the app compares fingerprints of its own files with the ones it
+   started with. If they differ, a small bar appears, but never while you are typing or a sheet/popup is open. */
+var VER_EVERY_MS=600000;
+var ver={base:null,baseNote:null,at:0,ready:false,note:''};
+function hashText(t){
+  return crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)).then(function(b){
+    return Array.prototype.map.call(new Uint8Array(b),function(x){return ('0'+x.toString(16)).slice(-2)}).join('');
+  });
+}
+function fetchText(f,optional){
+  return fetch(f,{cache:'no-store'}).then(function(r){
+    if(!r.ok){if(optional)return '';throw new Error('x')}
+    return r.text();
+  });
+}
+/* update-note.txt: the first line that is not empty and does not start with # is the banner message (max 100 characters) */
+function noteLine(t){
+  var L=String(t||'').split(String.fromCharCode(10));   /* trim() below also removes a trailing carriage return */
+  for(var i=0;i<L.length;i++){var s=L[i].trim();if(s&&s.charAt(0)!=='#')return s.slice(0,100)}
+  return '';
+}
+function fetchFingerprint(){
+  return Promise.all([fetchText('index.html'),fetchText('app.js'),fetchText('update-note.txt',true)]).then(function(t){
+    return Promise.all(t.map(hashText)).then(function(h){return {fp:h[0]+'|'+h[1],noteHash:h[2],note:noteLine(t[2])}});
+  });
+}
+function checkVersion(){
+  if(ver.ready||!window.crypto||!crypto.subtle)return;
+  var now=Date.now();
+  if(now-ver.at<VER_EVERY_MS)return;
+  ver.at=now;
+  fetchFingerprint().then(function(r){
+    if(ver.base===null){ver.base=r.fp;ver.baseNote=r.noteHash}
+    else if(r.fp!==ver.base||r.noteHash!==ver.baseNote){
+      ver.ready=true;
+      ver.note=r.noteHash!==ver.baseNote?r.note:'';   /* a custom message only if update-note.txt was changed in this update */
+    }
+  }).catch(function(){});
+}
+function maybeShowUpdate(){
+  if(!ver.ready||$('#upd')||!S.me)return;
+  var a=document.activeElement,typing=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'),pop=$('#pop');
+  if(typing||$('.sheet-back')||(pop&&pop.dataset.id))return;
+  var b=document.createElement('div'),msg=document.createElement('span'),btn=document.createElement('button');
+  b.id='upd';b.setAttribute('role','status');
+  msg.textContent=ver.note||'A new version is ready 💗';   /* textContent: the message can never be treated as HTML */
+  btn.className='btn small';btn.dataset.act='upd-refresh';btn.textContent='Refresh';
+  b.appendChild(msg);b.appendChild(btn);
+  document.body.appendChild(b);
+}
 function tick(){
+  if(!document.hidden)checkVersion();
   if(!S.booted||!isUnlocked()||!S.me)return;
+  maybeShowUpdate();
   if(renderKey()!==S.rendered){render();return}
   maybeOnboard();
   var now=Date.now();
@@ -967,6 +1021,7 @@ var actions={
   'mood-skip':function(){markCiDone();closePop()},
   'cio-ok':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();render()},
   'cio-note':function(el){store.set('vj_seenci_'+S.me,el.dataset.id);closePop();noteSheet()},
+  'upd-refresh':function(){location.reload()},
   'onb-install-ok':function(){store.set('vj_onb_install','1');closePop()},
   'onb-notif-on':function(){store.set('vj_onb_notif_'+S.me,'1');closePop();enablePush()},
   'onb-notif-later':function(){store.set('vj_onb_notif_'+S.me,'1');closePop();toast('You can turn them on any time in Settings 💗')},
